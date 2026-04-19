@@ -1,0 +1,63 @@
+name: Smoke tests
+
+# Run every example against a real Ontario staging deployment on every
+# push/PR. Catches drift between the SDK and the API contract early —
+# when this fails, either the SDK broke the example or the API contract
+# changed.
+
+on:
+  pull_request:
+    branches: ["main"]
+  push:
+    branches: ["main"]
+  schedule:
+    # Daily guard against API contract drift that isn't triggered by code
+    # changes here. Cron: 13:00 UTC ≈ 09:00 Eastern.
+    - cron: "0 13 * * *"
+
+concurrency:
+  group: ${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  quickstart:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.11", "3.12", "3.13"]
+    env:
+      STX_EMAIL: ${{ secrets.STX_EMAIL }}
+      STX_PASSWORD: ${{ secrets.STX_PASSWORD }}
+      STX_REGION: ontario
+      STX_ENV: staging
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install stx-python
+        # While stx-python is on TestPyPI only, pull from there and use
+        # PyPI as the fallback index for transitive deps. Swap both
+        # flags for `pip install stx-python` once the package ships
+        # to the main PyPI index.
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            --index-url https://test.pypi.org/simple/ \
+            --extra-index-url https://pypi.org/simple/ \
+            "stx-python>=0.1.0a2"
+
+      - name: Sanity import
+        run: |
+          python -c "import stx; print('stx-python', stx.__version__)"
+
+      - name: Run quickstart
+        run: python quickstart.py
+
+      - name: Run list_markets
+        run: python list_markets.py
