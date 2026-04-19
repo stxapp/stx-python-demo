@@ -3,7 +3,7 @@ name: Smoke tests
 # Run every example against a real Ontario staging deployment on every
 # push/PR. Catches drift between the SDK and the API contract early —
 # when this fails, either the SDK broke the example or the API contract
-# changed. Both are the SDK team's problem to fix before consumers hit it.
+# changed.
 
 on:
   pull_request:
@@ -40,15 +40,17 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install stx-python from source repo
-        # Pinned to a specific ref of betstackai/pysdk so CI is
-        # deterministic. Bump this when you want to pull new SDK
-        # changes. Once stx-python is on PyPI this becomes
-        #   pip install stx-python==0.1.0a1
+      - name: Install stx-python
+        # While stx-python is on TestPyPI only, pull from there and use
+        # PyPI as the fallback index for transitive deps. Swap both
+        # flags for `pip install stx-python` once the package ships
+        # to the main PyPI index.
         run: |
           python -m pip install --upgrade pip
           python -m pip install \
-            "stx-python @ git+https://github.com/betstackai/pysdk.git@main#subdirectory=stx-python"
+            --index-url https://test.pypi.org/simple/ \
+            --extra-index-url https://pypi.org/simple/ \
+            "stx-python>=0.1.0a2"
 
       - name: Sanity import
         run: |

@@ -1,21 +1,24 @@
 # stx-python-demo
 
-Public cookbook + getting-started examples for the [STX Python SDK](https://github.com/betstackai/pysdk).
+Public cookbook + getting-started examples for the STX Python SDK.
 
 Each script here runs end-to-end against a real STX environment and is covered by CI.
 
 ## Install
 
-Once `stx-python` is published to PyPI:
+`stx-python` is currently in pre-release on TestPyPI. Install with:
+
+```bash
+pip install \
+  --index-url https://test.pypi.org/simple/ \
+  --extra-index-url https://pypi.org/simple/ \
+  "stx-python>=0.1.0a2"
+```
+
+Once the package ships to the main PyPI index, this becomes:
 
 ```bash
 pip install stx-python
-```
-
-Until then, install directly from the SDK repo:
-
-```bash
-pip install "stx-python @ git+https://github.com/betstackai/pysdk.git#subdirectory=stx-python"
 ```
 
 ## Quickstart
@@ -56,19 +59,14 @@ See [`quickstart.py`](./quickstart.py) in the repo for the runnable version.
 
 ## Recipes
 
-Runnable scripts that demonstrate single features end-to-end. Each pins the SDK version it was tested against.
+Runnable scripts that demonstrate single features end-to-end.
 
 | Script | What it shows |
 |---|---|
 | [`quickstart.py`](./quickstart.py) | Minimal login + narrow-selection query, exception-based error handling. |
 | [`list_markets.py`](./list_markets.py) | Fetch all markets with richer selection, show the GraphQL response-shaping advantage. |
 
-More recipes arrive as the SDK gains features:
-
-- `market_maker_template.py` — blocked on WebSocket client ([SX-10679](https://sportsx.atlassian.net/browse/SX-10679)).
-- `stream_orderbook.py` — blocked on WebSocket client.
-- `reconnect_safe_ws.py` — blocked on WebSocket client.
-- `export_fills_csv.py` — portfolio export, arrives alongside the retry policy ([SX-10685](https://sportsx.atlassian.net/browse/SX-10685)).
+More recipes will land here as the SDK matures — WebSocket streaming, market-maker templates, orderbook streaming, portfolio export, reconnect-safe patterns.
 
 ## Configuration
 
@@ -103,5 +101,5 @@ MIT. See [LICENSE](./LICENSE).
 
 ## Related
 
-- SDK source: [betstackai/pysdk](https://github.com/betstackai/pysdk)
-- Developer docs (Mintlify, coming via [SX-10710](https://sportsx.atlassian.net/browse/SX-10710)): `docs.stxapp.com` _(planned)_
+- Developer docs: see the official docs site for quickstart, authentication, trading, and WebSocket guides.
+- Issues: report bugs or request examples via the [Issues](https://github.com/stxapp/stx-python-demo/issues) tab.
