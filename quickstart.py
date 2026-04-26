@@ -6,7 +6,7 @@ Requires stx-python installed (see README.md). Credentials read from env:
     export STX_PASSWORD="..."
     python quickstart.py
 
-Compatible with stx-python >= 0.1.0a1.
+Compatible with stx-python >= 0.1.0a3 (typed Pydantic response models).
 """
 from stx import STX, Selection
 from stx.exceptions import STXAuthException, STXTwoFactorRequiredException
@@ -32,7 +32,10 @@ def main() -> None:
         )
         print(f"Got {len(markets)} markets. First 5:")
         for m in markets[:5]:
-            print(f"  {m['marketId']}: [{m['status']}] {m['title']}")
+            # marketInfos() returns List[MarketInfo] — Pydantic models, not
+            # dicts. Use attribute access. Call m.model_dump() if you
+            # genuinely need a plain dict back.
+            print(f"  {m.marketId}: [{m.status}] {m.title}")
 
 
 if __name__ == "__main__":

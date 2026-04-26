@@ -7,7 +7,7 @@ Requires stx-python installed (see README.md). Run:
     export STX_PASSWORD="..."
     python list_markets.py
 
-Compatible with stx-python >= 0.1.0a1.
+Compatible with stx-python >= 0.1.0a3 (typed Pydantic response models).
 """
 from stx import STX, Selection
 
@@ -48,18 +48,25 @@ def main() -> None:
         print(f"Medium  (+ title/sport/price/vol):  {len(medium)} markets, ~{format_bytes(medium_size)}")
 
         # (3) Default: no selections → every scalar field. Acts like a
-        # REST /markets endpoint.  Use this if you want everything and
-        # don't care about payload size.
-        wide = client.marketInfos()
+        # REST /markets endpoint. Capped at 50 markets here because the
+        # full all-fields walk over the entire orderbook is heavy enough
+        # to time out on staging/dev gateways. In your own code, pass
+        # `limit` (or other MarketInfosInput filters) sized to your
+        # actual workload.
+        wide = client.marketInfos(params={"input": {"limit": 50}})
         wide_size = len(str(wide))
         print(f"Default (all scalar fields):  {len(wide)} markets, ~{format_bytes(wide_size)}")
 
         # Print the first market from each to show shape differences.
+        # marketInfos() returns List[MarketInfo] — Pydantic models, not
+        # dicts. They print themselves nicely; for the field-set use
+        # .model_fields_set (the set of fields actually populated by
+        # the Selection).
         print()
         print("Shape comparison for first market:")
         print(f"  Narrow:  {narrow[0]}")
         print(f"  Medium:  {medium[0]}")
-        print(f"  Default: {list(wide[0].keys())}")
+        print(f"  Default: {sorted(wide[0].model_fields_set)}")
 
 
 if __name__ == "__main__":

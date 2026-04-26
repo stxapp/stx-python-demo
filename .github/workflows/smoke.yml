@@ -14,6 +14,10 @@ on:
     # Daily guard against API contract drift that isn't triggered by code
     # changes here. Cron: 13:00 UTC ≈ 09:00 Eastern.
     - cron: "0 13 * * *"
+  # Manual trigger via `gh workflow run smoke.yml --repo stxapp/stx-python-demo --ref main`.
+  # Useful for verifying immediately after publishing a new SDK alpha
+  # rather than waiting up to 24h for the next cron.
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.head_ref || github.run_id }}
