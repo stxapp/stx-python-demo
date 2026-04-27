@@ -7,7 +7,7 @@ Requires stx-python installed (see README.md). Run:
     export STX_PASSWORD="..."
     python list_markets.py
 
-Compatible with stx-python >= 0.2.0a1 (PEP 8 snake_case API).
+Compatible with stx-python >= 0.3.0a2 (markets alias + Page[T]).
 """
 from stx import STX, Selection
 
@@ -27,25 +27,28 @@ def main() -> None:
         client.login(params={})
 
         # (1) Narrow: the minimum a list view needs. Fast, small payload.
-        narrow = client.market_infos(
+        narrow = client.markets(
+            params={"input": {"limit": 50}},
             selections=Selection("market_id", "status"),
         )
-        narrow_size = len(str(narrow))
-        print(f"Narrow  (market_id + status):       {len(narrow)} markets, ~{format_bytes(narrow_size)}")
+        narrow_size = len(str(list(narrow)))
+        print(
+            f"Narrow  (market_id + status):       "
+            f"{len(narrow)} markets, ~{format_bytes(narrow_size)}"
+        )
 
         # (2) Medium: a realistic list-view slice.
-        medium = client.market_infos(
+        medium = client.markets(
+            params={"input": {"limit": 50}},
             selections=Selection(
-                "market_id",
-                "status",
-                "title",
-                "sport",
-                "price",
-                "volume24h",
+                "market_id", "status", "title", "sport", "price", "volume24h"
             ),
         )
-        medium_size = len(str(medium))
-        print(f"Medium  (+ title/sport/price/vol):  {len(medium)} markets, ~{format_bytes(medium_size)}")
+        medium_size = len(str(list(medium)))
+        print(
+            f"Medium  (+ title/sport/price/vol):  "
+            f"{len(medium)} markets, ~{format_bytes(medium_size)}"
+        )
 
         # (3) Default: no selections → every scalar field. Acts like a
         # REST /markets endpoint. Capped at 50 markets here because the
@@ -53,12 +56,15 @@ def main() -> None:
         # to time out on staging/dev gateways. In your own code, pass
         # `limit` (or other MarketInfosInput filters) sized to your
         # actual workload.
-        wide = client.market_infos(params={"input": {"limit": 50}})
-        wide_size = len(str(wide))
-        print(f"Default (all scalar fields):  {len(wide)} markets, ~{format_bytes(wide_size)}")
+        wide = client.markets(params={"input": {"limit": 50}})
+        wide_size = len(str(list(wide)))
+        print(
+            f"Default (all scalar fields):  "
+            f"{len(wide)} markets, ~{format_bytes(wide_size)}"
+        )
 
         # Print the first market from each to show shape differences.
-        # market_infos() returns List[MarketInfo] — Pydantic models,
+        # client.markets() returns Page[MarketInfo] — Pydantic models,
         # not dicts. They print themselves nicely; for the field-set
         # use .model_fields_set (the set of fields actually populated
         # by the Selection).
