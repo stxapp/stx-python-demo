@@ -45,16 +45,12 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install stx-python
-        # While stx-python is on TestPyPI only, pull from there and use
-        # PyPI as the fallback index for transitive deps. Swap both
-        # flags for `pip install stx-python` once the package ships
-        # to the main PyPI index.
+        # Pin + index-urls live in requirements.txt — single source of
+        # truth shared with local devs. CI exercises the same install
+        # flow a contributor would run on their laptop.
         run: |
           python -m pip install --upgrade pip
-          python -m pip install \
-            --index-url https://test.pypi.org/simple/ \
-            --extra-index-url https://pypi.org/simple/ \
-            "stx-python>=0.3.0a2"
+          python -m pip install -r requirements.txt
 
       - name: Sanity import
         run: |
