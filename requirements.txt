@@ -1,0 +1,13 @@
+# Pip-installable pin for the demo scripts.
+#
+# Run:
+#     pip install -r requirements.txt
+#
+# stx-python is in pre-release on TestPyPI until 1.0; the index-url
+# directives below tell pip to look there for the SDK while still using
+# main PyPI for the transitive deps. Once we ship to main PyPI, drop
+# both index-url lines and keep just the pin.
+--index-url https://test.pypi.org/simple/
+--extra-index-url https://pypi.org/simple/
+
+stx-python>=0.3.0a2

@@ -6,20 +6,19 @@ Each script here runs end-to-end against a real STX environment and is covered b
 
 ## Install
 
-`stx-python` is currently in pre-release on TestPyPI. Install with:
+The pin and index-urls live in [`requirements.txt`](./requirements.txt) — clone the repo and run:
 
 ```bash
-pip install \
-  --index-url https://test.pypi.org/simple/ \
-  --extra-index-url https://pypi.org/simple/ \
-  "stx-python>=0.3.0a2"
+git clone https://github.com/stxapp/stx-python-demo.git
+cd stx-python-demo
+
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-Once the package ships to the main PyPI index, this becomes:
+`stx-python` is currently in pre-release on TestPyPI; `requirements.txt` carries `--index-url` directives that point pip there for the SDK while still resolving transitive deps from main PyPI. Once the package ships to main PyPI, the file simplifies to a single `stx-python` line.
 
-```bash
-pip install stx-python
-```
+If you'd rather not clone, `pip install -r https://raw.githubusercontent.com/stxapp/stx-python-demo/main/requirements.txt` works too.
 
 ## Quickstart
 
@@ -53,7 +52,7 @@ for m in page[:5]:
 client.close()
 ```
 
-Run it with credentials from env vars:
+Run it with credentials from env vars (copy `.env.example` to `.env` for repeated local runs):
 
 ```bash
 export STX_EMAIL="you@example.com"
