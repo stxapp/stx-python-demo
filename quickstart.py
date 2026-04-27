@@ -6,7 +6,7 @@ Requires stx-python installed (see README.md). Credentials read from env:
     export STX_PASSWORD="..."
     python quickstart.py
 
-Compatible with stx-python >= 0.2.0a1 (PEP 8 snake_case API).
+Compatible with stx-python >= 0.3.0a2 (markets alias + Page[T]).
 """
 from stx import STX, Selection
 from stx.exceptions import STXAuthException, STXTwoFactorRequiredException
@@ -27,14 +27,15 @@ def main() -> None:
 
         # Narrow GraphQL selection — the server returns ONLY the fields you
         # ask for. This is the structural advantage over REST SDKs.
-        markets = client.market_infos(
+        page = client.markets(
+            params={"input": {"limit": 25}},
             selections=Selection("market_id", "status", "title"),
         )
-        print(f"Got {len(markets)} markets. First 5:")
-        for m in markets[:5]:
-            # market_infos() returns List[MarketInfo] — Pydantic models,
-            # not dicts. Use attribute access. Call m.model_dump() if
-            # you genuinely need a plain dict back.
+        # `page` is a Page[MarketInfo]: iterable + len() + .count (server total).
+        print(f"Got {len(page)} of {page.count} markets. First 5:")
+        for m in page[:5]:
+            # MarketInfo is a Pydantic model — attribute access. Use
+            # m.model_dump() if you genuinely need a plain dict back.
             print(f"  {m.market_id}: [{m.status}] {m.title}")
 
 

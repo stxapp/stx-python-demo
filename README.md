@@ -12,7 +12,7 @@ Each script here runs end-to-end against a real STX environment and is covered b
 pip install \
   --index-url https://test.pypi.org/simple/ \
   --extra-index-url https://pypi.org/simple/ \
-  "stx-python>=0.2.0a1"
+  "stx-python>=0.3.0a2"
 ```
 
 Once the package ships to the main PyPI index, this becomes:
@@ -40,8 +40,14 @@ except STXAuthException as exc:
     raise
 
 # Narrow selection — only ask for the fields you need.
-markets = client.market_infos(selections=Selection("market_id", "status", "title"))
-for m in markets[:5]:
+# `client.markets()` returns a Page[MarketInfo] — iterate it like a list,
+# read `.count` for the server-side total.
+page = client.markets(
+    params={"input": {"limit": 25}},
+    selections=Selection("market_id", "status", "title"),
+)
+print(f"showing {len(page)} of {page.count}")
+for m in page[:5]:
     print(f"{m.market_id}: [{m.status}] {m.title}")
 
 client.close()
