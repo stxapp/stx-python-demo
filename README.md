@@ -1,8 +1,6 @@
 # stx-python-demo
 
-Public cookbook + getting-started examples for the STX Python SDK.
-
-Each script here runs end-to-end against a real STX environment and is covered by CI.
+Runnable Python examples for trading on STX. Each script is a self-contained workflow — log in, browse markets, place a safe order, stream live updates — that you can copy as the starting point for your own bot or research code.
 
 ## Install
 
@@ -16,75 +14,59 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-`stx-python` is currently in pre-release on TestPyPI; `requirements.txt` carries `--index-url` directives that point pip there for the SDK while still resolving transitive deps from main PyPI. Once the package ships to main PyPI, the file simplifies to a single `stx-python` line.
+`stx-python` is currently in pre-release on TestPyPI. `requirements.txt` always pulls the latest published version (the `--pre` flag enables alpha/beta resolution); once we ship 1.0 to main PyPI the file collapses to a single `stx-python` line.
 
 If you'd rather not clone, `pip install -r https://raw.githubusercontent.com/stxapp/stx-python-demo/main/requirements.txt` works too.
 
-## Quickstart
+## Examples
 
-The shortest working example:
+All read from `STX_EMAIL` / `STX_PASSWORD` (set them in your shell or copy [`.env.example`](./.env.example) to `.env`). All target Ontario staging by default.
 
-```python
-# quickstart.py
-from stx import STX, Selection
-from stx.exceptions import STXAuthException
+### Getting started
 
-client = STX(region="ontario", env="staging",
-             email="you@example.com", password="...")
-
-try:
-    client.login(params={})
-except STXAuthException as exc:
-    print(f"Login failed: {exc.message}")
-    raise
-
-# Narrow selection — only ask for the fields you need.
-# `client.markets()` returns a Page[MarketInfo] — iterate it like a list,
-# read `.count` for the server-side total.
-page = client.markets(
-    params={"input": {"limit": 25}},
-    selections=Selection("market_id", "status", "title"),
-)
-print(f"showing {len(page)} of {page.count}")
-for m in page[:5]:
-    print(f"{m.market_id}: [{m.status}] {m.title}")
-
-client.close()
-```
-
-Run it with credentials from env vars (copy `.env.example` to `.env` for repeated local runs):
-
-```bash
-export STX_EMAIL="you@example.com"
-export STX_PASSWORD="..."
-python quickstart.py
-```
-
-See [`quickstart.py`](./quickstart.py) in the repo for the runnable version.
-
-## Recipes
-
-Runnable scripts that demonstrate single features end-to-end.
-
-| Script | What it shows |
+| Script | Scenario |
 |---|---|
-| [`quickstart.py`](./quickstart.py) | Minimal login + narrow-selection query, exception-based error handling. |
-| [`list_markets.py`](./list_markets.py) | Fetch all markets with richer selection, show the GraphQL response-shaping advantage. |
+| [`quickstart.py`](./quickstart.py) | Smallest possible Hello World — log in and pull a few open markets. |
+| [`auth_flow.py`](./auth_flow.py) | The three branches every production caller handles: happy login, 2FA challenge, manual token refresh. |
 
-More recipes will land here as the SDK matures — WebSocket streaming, market-maker templates, orderbook streaming, portfolio export, reconnect-safe patterns.
+### Read-only data
+
+| Script | Scenario |
+|---|---|
+| [`list_markets.py`](./list_markets.py) | Top-N most-active OPEN markets in a clean table — what you'd open to find something to trade. |
+| [`account_overview.py`](./account_overview.py) | Balances, loyalty tier, per-market position stats. |
+| [`history_pulls.py`](./history_pulls.py) | Paginated `orders` / `trades` / `settlements` — uses `Page[T]` semantics. |
+
+### Trading
+
+| Script | Scenario |
+|---|---|
+| [`safe_order_round_trip.py`](./safe_order_round_trip.py) | Place a 1¢ LIMIT BUY (never fills), verify it appears in history, cancel it. Try/finally cleanup. |
+
+### WebSocket streaming
+
+| Script | Scenario |
+|---|---|
+| [`ws_market_stream.py`](./ws_market_stream.py) | Subscribe to the broadcast `MARKETS` channel; print frames for 30 s. |
+| [`ws_personal_stream.py`](./ws_personal_stream.py) | Subscribe to per-user `PORTFOLIO` + `ORDERS` (auto-scoped to your uid). |
+
+### Async patterns
+
+| Script | Scenario |
+|---|---|
+| [`async_parallel_pulls.py`](./async_parallel_pulls.py) | `AsyncSTX` + `asyncio.gather` over independent ops — shows the speedup vs serial. |
+| [`async_with_ws.py`](./async_with_ws.py) | Event-driven bot pattern: WebSocket pushes events, `AsyncSTX` reacts via HTTP. |
 
 ## Configuration
-
-Every script reads credentials from the environment so you can keep them out of source:
 
 | Variable | Purpose |
 |---|---|
 | `STX_EMAIL` | Your STX account email. |
 | `STX_PASSWORD` | Your STX account password. |
-| `STX_REGION` | `ontario` or `us`. Defaults per-script. |
-| `STX_ENV` | `production` / `staging` / `demo` / `dev` / `qa`. Defaults per-script. |
+| `STX_REGION` | `ontario` or `us` — overrides the per-script default. |
+| `STX_ENV` | `production` / `staging` / `demo` / `dev` / `qa` — overrides the per-script default. |
 
-Copy `.env.example` to `.env` (gitignored) and fill in values for repeated use.
+`STX_HOST` overrides region/env entirely if you need to point at a custom host.
 
 ## Continuous integration
 
@@ -94,11 +76,10 @@ Credentials used by CI live as repository secrets; no real credentials ever hit 
 
 ## Contributing a recipe
 
-1. Write a self-contained script under the repo root or `recipes/`.
+1. Write a self-contained script at the repo root.
 2. Read credentials from env vars — never hardcode.
-3. Pin the SDK version at the top (`# stx-python>=X.Y.Z`).
-4. Add a row to the table above.
-5. Extend `.github/workflows/smoke.yml` to run it in CI.
+3. Add a row to the table above describing the scenario.
+4. Extend [`.github/workflows/smoke.yml`](./.github/workflows/smoke.yml) to run it in CI.
 
 ## License
 
@@ -106,5 +87,5 @@ MIT. See [LICENSE](./LICENSE).
 
 ## Related
 
-- Developer docs: see the official docs site for quickstart, authentication, trading, and WebSocket guides.
+- Developer docs: the official docs site for quickstart, authentication, trading, and WebSocket guides.
 - Issues: report bugs or request examples via the [Issues](https://github.com/stxapp/stx-python-demo/issues) tab.
