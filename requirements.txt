@@ -3,11 +3,16 @@
 # Run:
 #     pip install -r requirements.txt
 #
-# stx-python is in pre-release on TestPyPI until 1.0; the index-url
-# directives below tell pip to look there for the SDK while still using
-# main PyPI for the transitive deps. Once we ship to main PyPI, drop
-# both index-url lines and keep just the pin.
+# stx-python is in pre-release on TestPyPI until 1.0:
+#   --index-url + --extra-index-url tell pip to look on TestPyPI for
+#     the SDK while still resolving transitive deps from main PyPI.
+#   --pre enables alpha/beta resolution (without it, `stx-python`
+#     wouldn't resolve to anything since 1.0 isn't out yet).
+#
+# Once we ship 1.0 to main PyPI, this whole file collapses to:
+#     stx-python
 --index-url https://test.pypi.org/simple/
 --extra-index-url https://pypi.org/simple/
+--pre
 
-stx-python>=0.3.0a3
+stx-python

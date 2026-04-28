@@ -1,78 +1,81 @@
-"""List STX markets with progressively richer selections — shows the
-GraphQL response-shaping advantage over REST SDKs.
+"""List the most-active OPEN markets — the kind of view a trader opens
+to find something to bet on.
 
-Requires stx-python installed (see README.md). Run:
+Sorts by 24-hour volume and prints a clean table:
 
+    SPORT       TITLE                                 STATUS  PRICE  PROB    24h VOL
+    ───────────────────────────────────────────────────────────────────────────────
+    Soccer      Chelsea vs Arsenal                    OPEN    0.62   62%    $1,243,820
+    ...
+
+Run:
     export STX_EMAIL="you@example.com"
     export STX_PASSWORD="..."
     python list_markets.py
 
-Compatible with stx-python >= 0.3.0a2 (markets alias + Page[T]).
+Note on field shaping: ``client.markets()`` returns a ``Page[MarketInfo]``;
+passing a flat ``Selection(...)`` narrows the per-market response so
+you only pay for the fields you need on the wire. For 100-market lists
+the narrow form is 10–30× smaller than the default schema walk — matters
+once you scale.
 """
 from stx import STX, Selection
 
 
-def format_bytes(b: int) -> str:
-    """Tiny human-readable byte formatter, used to highlight the
-    payload-size difference between narrow and wide selections."""
-    for unit in ("B", "KB", "MB"):
-        if b < 1024:
-            return f"{b:.1f} {unit}"
-        b /= 1024
-    return f"{b:.1f} GB"
+TOP_N = 20
+
+
+def _fmt_price(p: float | None) -> str:
+    return f"{p:.2f}" if p is not None else "  —"
+
+
+def _fmt_prob(p: float | None) -> str:
+    return f"{p * 100:>3.0f}%" if p is not None else "  —"
+
+
+def _fmt_volume(v: int | None) -> str:
+    if v is None:
+        return "        —"
+    if v >= 1_000_000:
+        return f"${v / 1_000_000:>5.1f}M"
+    if v >= 1_000:
+        return f"${v / 1_000:>5.1f}K"
+    return f"${v:>6.0f}"
 
 
 def main() -> None:
     with STX(region="ontario", env="staging") as client:
         client.login(params={})
 
-        # (1) Narrow: the minimum a list view needs. Fast, small payload.
-        narrow = client.markets(
-            params={"input": {"limit": 50}},
-            selections=Selection("market_id", "status"),
-        )
-        narrow_size = len(str(list(narrow)))
-        print(
-            f"Narrow  (market_id + status):       "
-            f"{len(narrow)} markets, ~{format_bytes(narrow_size)}"
-        )
-
-        # (2) Medium: a realistic list-view slice.
-        medium = client.markets(
-            params={"input": {"limit": 50}},
+        # Fetch a healthy slice — server-side filters narrow to currently-
+        # tradable markets; client-side sort by volume picks the top N.
+        page = client.markets(
+            params={"input": {"status": "OPEN", "trading": "TRUE", "limit": 200}},
             selections=Selection(
-                "market_id", "status", "title", "sport", "price", "volume24h"
+                "market_id", "sport", "title", "status", "price",
+                "probability", "volume24h",
             ),
         )
-        medium_size = len(str(list(medium)))
-        print(
-            f"Medium  (+ title/sport/price/vol):  "
-            f"{len(medium)} markets, ~{format_bytes(medium_size)}"
-        )
 
-        # (3) Default: no selections → every scalar field. Acts like a
-        # REST /markets endpoint. Capped at 50 markets here because the
-        # full all-fields walk over the entire orderbook is heavy enough
-        # to time out on staging/dev gateways. In your own code, pass
-        # `limit` (or other MarketInfosInput filters) sized to your
-        # actual workload.
-        wide = client.markets(params={"input": {"limit": 50}})
-        wide_size = len(str(list(wide)))
-        print(
-            f"Default (all scalar fields):  "
-            f"{len(wide)} markets, ~{format_bytes(wide_size)}"
-        )
+        # Page acts like a list — sort, slice as usual.
+        active = sorted(
+            (m for m in page if m.volume24h is not None),
+            key=lambda m: m.volume24h or 0,
+            reverse=True,
+        )[:TOP_N]
 
-        # Print the first market from each to show shape differences.
-        # client.markets() returns Page[MarketInfo] — Pydantic models,
-        # not dicts. They print themselves nicely; for the field-set
-        # use .model_fields_set (the set of fields actually populated
-        # by the Selection).
-        print()
-        print("Shape comparison for first market:")
-        print(f"  Narrow:  {narrow[0]}")
-        print(f"  Medium:  {medium[0]}")
-        print(f"  Default: {sorted(wide[0].model_fields_set)}")
+        print(f"Top {len(active)} active markets (of {page.count} open / tradable)\n")
+        header = f"  {'SPORT':<12} {'TITLE':<40} {'STATUS':<8} {'PRICE':<6} {'PROB':<5}  {'24h VOL':>9}"
+        print(header)
+        print("  " + "─" * (len(header) - 2))
+        for m in active:
+            sport = (m.sport or "—")[:12]
+            title = (m.title or "—")[:40]
+            print(
+                f"  {sport:<12} {title:<40} "
+                f"{m.status or '—':<8} {_fmt_price(m.price):<6} "
+                f"{_fmt_prob(m.probability):<5} {_fmt_volume(m.volume24h):>9}"
+            )
 
 
 if __name__ == "__main__":

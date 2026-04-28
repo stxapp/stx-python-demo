@@ -24,7 +24,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  quickstart:
+  smoke:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -53,11 +53,50 @@ jobs:
           python -m pip install -r requirements.txt
 
       - name: Sanity import
-        run: |
-          python -c "import stx; print('stx-python', stx.__version__)"
+        run: python -c "import stx; print('stx-python', stx.__version__)"
 
-      - name: Run quickstart
+      # ---- Getting started ----------------------------------------
+      - name: quickstart
         run: python quickstart.py
 
-      - name: Run list_markets
+      - name: auth_flow
+        # Assumes the CI account has 2FA disabled — the script handles
+        # the 2FA branch interactively, which CI can't satisfy.
+        run: python auth_flow.py
+
+      # ---- Read-only data -----------------------------------------
+      - name: list_markets
         run: python list_markets.py
+
+      - name: account_overview
+        run: python account_overview.py
+
+      - name: history_pulls
+        run: python history_pulls.py
+
+      # ---- Trading ------------------------------------------------
+      - name: safe_order_round_trip
+        # 1¢ LIMIT BUY never fills; try/finally cancel-all sweeps any
+        # leakage. Skips cleanly with SystemExit(0) if the env has no
+        # tradable markets right now.
+        timeout-minutes: 2
+        run: python safe_order_round_trip.py
+
+      # ---- WebSocket streaming ------------------------------------
+      # Each WS script has a 30s listen window; cap the step at 2min
+      # so a hung connection fails fast instead of burning the runner.
+      - name: ws_market_stream
+        timeout-minutes: 2
+        run: python ws_market_stream.py
+
+      - name: ws_personal_stream
+        timeout-minutes: 2
+        run: python ws_personal_stream.py
+
+      # ---- Async patterns -----------------------------------------
+      - name: async_parallel_pulls
+        run: python async_parallel_pulls.py
+
+      - name: async_with_ws
+        timeout-minutes: 2
+        run: python async_with_ws.py
