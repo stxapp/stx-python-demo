@@ -12,6 +12,8 @@ Run:
 Note: monetary fields on the wire are integer cents — divide by 100
 to display dollars.
 """
+from __future__ import annotations  # PEP 604 union syntax in helpers (3.9 compat)
+
 from stx import STX, Selection
 
 

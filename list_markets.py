@@ -19,6 +19,8 @@ you only pay for the fields you need on the wire. For 100-market lists
 the narrow form is 10–30× smaller than the default schema walk — matters
 once you scale.
 """
+from __future__ import annotations  # PEP 604 union syntax in helpers (3.9 compat)
+
 from stx import STX, Selection
 
 
