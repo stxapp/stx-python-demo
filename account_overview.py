@@ -17,7 +17,6 @@ from __future__ import annotations  # PEP 604 union syntax in helpers (3.9 compa
 from datetime import datetime, timezone
 
 from stx import STX, Selection
-from stx.exceptions import STXException
 
 
 def _fmt_cents(c: int | None) -> str:
@@ -76,8 +75,13 @@ def main() -> None:
                     f"amount={_fmt_cents(h.amount)}  "
                     f"points={h.points or 0:>+8.2f}"
                 )
-        except STXException as exc:
-            print(f"  (server error — skipping: {exc})")
+        except Exception as exc:
+            # Broad catch on purpose: transient backend 500s on staging
+            # surface as urllib3 RetryError (not classified as STXException
+            # in this SDK version), and the demo shouldn't fail end-to-end
+            # because of a server hiccup. Pin to STXException once the
+            # SDK upgrades its retry classifier.
+            print(f"  (server error — skipping: {type(exc).__name__})")
 
         # 3. Per-market stats — your position / fees / settled-contracts
         # across every market you've traded. Empty if you've never traded.
@@ -101,8 +105,13 @@ def main() -> None:
                     f"pnl={_fmt_cents(s.total_settlement_pnl)}  "
                     f"updated={_fmt_us(s.updated_at)}"
                 )
-        except STXException as exc:
-            print(f"  (server error — skipping: {exc})")
+        except Exception as exc:
+            # Broad catch on purpose: transient backend 500s on staging
+            # surface as urllib3 RetryError (not classified as STXException
+            # in this SDK version), and the demo shouldn't fail end-to-end
+            # because of a server hiccup. Pin to STXException once the
+            # SDK upgrades its retry classifier.
+            print(f"  (server error — skipping: {type(exc).__name__})")
 
 
 if __name__ == "__main__":
