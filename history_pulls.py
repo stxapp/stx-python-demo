@@ -8,11 +8,18 @@ Run:
     export STX_EMAIL="you@example.com"
     export STX_PASSWORD="..."
     python history_pulls.py
+
+Note: monetary fields on the wire are integer cents — divide by 100
+to display dollars.
 """
 from stx import STX, Selection
 
 
 PAGE_LIMIT = 10
+
+
+def _fmt_cents(c: int | None) -> str:
+    return "  —" if c is None else f"${c / 100:>8,.2f}"
 
 
 def main() -> None:
@@ -25,44 +32,57 @@ def main() -> None:
         orders = client.orders(
             params={"pagination": {"page": 0, "limit": PAGE_LIMIT}},
             selections=Selection(
-                "id", "market_id", "status", "action", "order_type",
-                "price", "quantity", "created_at",
+                "id", "market_id", "status", "action",
+                "price", "quantity", "filled", "time",
             ),
         )
         print(f"Orders — showing {len(orders)} of {orders.count}")
         for o in orders:
             print(
-                f"  {o.id or '—':<12} {o.market_id or '—':<20} "
-                f"{o.action or '—':<5} {o.order_type or '—':<7} "
-                f"qty={o.quantity or 0:>6}  px={o.price or 0:>5}  "
-                f"{o.status or '—'}  {o.created_at or ''}"
+                f"  {(o.id or '—'):<14} {(o.market_id or '—'):<14} "
+                f"{(o.action or '—'):<5} "
+                f"qty={o.quantity or 0:>5}/{o.filled or 0:<5}  "
+                f"px={_fmt_cents(o.price)}  "
+                f"{(o.status or '—'):<10} {o.time or ''}"
             )
 
         # ---- Trades ---------------------------------------------------
+        # Trade.filled is the executed quantity (NOT `quantity`).
         trades = client.trades(
             params={"pagination": {"page": 0, "limit": PAGE_LIMIT}},
             selections=Selection(
-                "id", "market_id", "action", "price", "quantity", "time"
+                "id", "market_id", "action", "price", "filled",
+                "premium", "time",
             ),
         )
         print(f"\nTrades — showing {len(trades)} of {trades.count}")
         for t in trades:
             print(
-                f"  {t.id or '—':<12} {t.market_id or '—':<20} "
-                f"{t.action or '—':<5} qty={t.quantity or 0:>6}  "
-                f"px={t.price or 0:>5}  {t.time or ''}"
+                f"  {(t.id or '—'):<14} {(t.market_id or '—'):<14} "
+                f"{(t.action or '—'):<5} "
+                f"filled={t.filled or 0:>5}  "
+                f"px={_fmt_cents(t.price)}  "
+                f"premium={_fmt_cents(t.premium)}  {t.time or ''}"
             )
 
         # ---- Settlements ----------------------------------------------
+        # `inserted_at_iso` is the human-readable ISO timestamp;
+        # `realized_pnl` is profit/loss net of fees.
         settlements = client.settlements(
             params={"pagination": {"page": 0, "limit": PAGE_LIMIT}},
-            selections=Selection("id", "market_id", "amount", "time"),
+            selections=Selection(
+                "id", "market_id", "type", "quantity",
+                "realized_pnl", "fee", "inserted_at_iso",
+            ),
         )
         print(f"\nSettlements — showing {len(settlements)} of {settlements.count}")
         for s in settlements:
             print(
-                f"  {s.id or '—':<12} {s.market_id or '—':<20} "
-                f"amount={s.amount or 0:>+10.2f}  {s.time or ''}"
+                f"  {(s.id or '—'):<14} {(s.market_id or '—'):<14} "
+                f"{(s.type or '—'):<10} "
+                f"qty={s.quantity or 0:>5}  "
+                f"pnl={_fmt_cents(s.realized_pnl)}  "
+                f"fee={_fmt_cents(s.fee)}  {s.inserted_at_iso or ''}"
             )
 
 
