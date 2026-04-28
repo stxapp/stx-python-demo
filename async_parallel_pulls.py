@@ -38,8 +38,13 @@ async def main() -> None:
 
         # Parallel — same three ops scheduled concurrently. The session
         # multiplexes them over the kept-alive aiohttp connection.
+        #
+        # `return_exceptions=True` so a single failure on staging (token
+        # races during concurrent auth checks, transient 5xx, etc.)
+        # doesn't take the whole demo down — we report what came back
+        # and what failed instead.
         t0 = time.perf_counter()
-        m1p, m2p, acctp = await asyncio.gather(
+        results = await asyncio.gather(
             client.markets(
                 params={"input": {"sports": ["Soccer"], "limit": 25}},
                 selections=Selection("market_id", "title"),
@@ -49,20 +54,23 @@ async def main() -> None:
                 selections=Selection("market_id", "title"),
             ),
             client.account(selections=Selection("available_balance", "loyalty_tier")),
+            return_exceptions=True,
         )
         parallel = time.perf_counter() - t0
 
-        print(
-            f"Soccer: {len(m1)} markets   "
-            f"Basketball: {len(m2)} markets   "
-            f"Balance: ${acctp.available_balance or 0:.2f}"
-        )
+        labels = ("soccer-markets", "basketball-markets", "account")
+        for label, r in zip(labels, results):
+            if isinstance(r, Exception):
+                print(f"  {label:<20} failed: {type(r).__name__}: {r}")
+            elif label.endswith("markets"):
+                print(f"  {label:<20} {len(r)} rows")
+            else:
+                print(f"  {label:<20} balance=${r.available_balance or 0:.2f}")
+
         print(f"\n  serial:   {serial * 1000:>6.0f} ms")
         print(f"  parallel: {parallel * 1000:>6.0f} ms")
         if serial > 0:
             print(f"  speedup:  {serial / parallel:.2f}×")
-        # Sanity — same data shape returned both ways.
-        assert len(m1) == len(m1p) and len(m2) == len(m2p)
 
 
 if __name__ == "__main__":

@@ -23,6 +23,8 @@ Run:
     export STX_PASSWORD="..."
     python safe_order_round_trip.py
 """
+from __future__ import annotations  # `str | None` in helper signatures (3.9 compat)
+
 import sys
 
 from stx import STX, Selection
@@ -100,15 +102,23 @@ def main() -> None:
                 },
                 selections=Selection("id", "status", "price", "quantity"),
             )
-            assert len(orders) == 1, f"Expected to see our order; got {len(orders)}"
-            print(f"  → visible in orders(): {orders[0].status}")
+            if len(orders) == 1:
+                print(f"  → visible in orders(): {orders[0].status}")
+            else:
+                print(f"  → orders() didn't return our row yet (eventual consistency)")
 
-            # Cancel it.
-            client.cancel_order(
-                params={"order_id": order_id},
-                selections=Selection("status"),
-            )
-            print(f"  → cancelled {order_id}")
+            # Cancel it. Server may have already moved the order to a
+            # non-cancellable state by the time we get here (filled, expired,
+            # auto-cancelled, etc.); tolerate that — the finally block sweeps
+            # any survivors via cancel_all_orders.
+            try:
+                client.cancel_order(
+                    params={"order_id": order_id},
+                    selections=Selection("status"),
+                )
+                print(f"  → cancelled {order_id}")
+            except Exception as exc:
+                print(f"  → cancel_order raised ({type(exc).__name__}); finally will sweep")
         finally:
             # Belt-and-suspenders cleanup. If we crashed somewhere above,
             # this still wipes any resting orders we might have left.
