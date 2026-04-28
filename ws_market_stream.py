@@ -41,6 +41,53 @@ def _now_hms() -> str:
     return datetime.now().strftime("%H:%M:%S")
 
 
+def _fmt_book_side(side):
+    """Render a list of {price, quantity} bid/offer entries compactly.
+    Shows the top three levels and a count of any extras."""
+    if not side:
+        return "—"
+    if not isinstance(side, list):
+        return repr(side)
+    levels = []
+    for entry in side[:3]:
+        if isinstance(entry, dict):
+            px = entry.get("price")
+            qty = entry.get("quantity") or entry.get("qty")
+            levels.append(f"{px}@{qty}")
+        else:
+            levels.append(str(entry))
+    rendered = ", ".join(levels)
+    if len(side) > 3:
+        rendered += f" (+{len(side) - 3})"
+    return rendered
+
+
+def _fmt_market_payload(payload):
+    """Pluck the fields a trader actually wants from a market_update
+    payload — id, status, bids, offers — and ignore the rest. Falls
+    back to a truncated repr for control frames that don't carry a
+    market shape (e.g. phx_reply)."""
+    if not isinstance(payload, dict):
+        return "—" if payload is None else str(payload)
+    # Server keys vary slightly by event; check both camelCase and snake.
+    market_id = payload.get("marketId") or payload.get("market_id") or payload.get("id")
+    status = payload.get("status")
+    bids = payload.get("bids")
+    offers = payload.get("offers")
+    # Recognise a market-shaped frame by the presence of bids/offers or a
+    # market id. `status` alone isn't enough — phx_reply also carries a
+    # `status: ok` and we don't want to render it as a (mostly-empty)
+    # market row.
+    if bids is None and offers is None and market_id is None:
+        s = repr(payload)
+        return s if len(s) <= 120 else s[:117] + "..."
+    return (
+        f"id={market_id}  status={status}  "
+        f"bids=[{_fmt_book_side(bids)}]  "
+        f"offers=[{_fmt_book_side(offers)}]"
+    )
+
+
 async def stream() -> None:
     # Seed the User singleton so the WS client picks up the JWT —
     # STXWebSocket reads the token but doesn't perform login itself.
@@ -53,12 +100,7 @@ async def stream() -> None:
     async def on_msg(msg) -> None:
         events[msg.event] += 1
         received.append(msg)
-        # Live print — what you came here to see. Truncate the payload
-        # if it's chatty so the table stays readable.
-        payload = repr(msg.payload)
-        if len(payload) > 120:
-            payload = payload[:117] + "..."
-        print(f"  [{_now_hms()}] {msg.event:<20} {payload}")
+        print(f"  [{_now_hms()}] {msg.event:<20} {_fmt_market_payload(msg.payload)}")
 
     async with STXWebSocket(region="ontario", env="staging") as ws:
         # MARKETS is a broadcast channel — no per-user scoping. The
