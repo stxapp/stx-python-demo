@@ -19,16 +19,16 @@ from stx import AsyncSTX, Selection
 
 async def main() -> None:
     async with AsyncSTX(region="ontario", env="staging") as client:
-        await client.login(params={})
+        await client.login()
 
         # Serial baseline — three independent ops, one after another.
         t0 = time.perf_counter()
         m1 = await client.markets(
-            params={"input": {"sports": ["Soccer"], "limit": 25}},
+            sports=["Soccer"], limit=25,
             selections=Selection("market_id", "title"),
         )
         m2 = await client.markets(
-            params={"input": {"sports": ["Basketball"], "limit": 25}},
+            sports=["Basketball"], limit=25,
             selections=Selection("market_id", "title"),
         )
         acct = await client.account(
@@ -46,11 +46,11 @@ async def main() -> None:
         t0 = time.perf_counter()
         results = await asyncio.gather(
             client.markets(
-                params={"input": {"sports": ["Soccer"], "limit": 25}},
+                sports=["Soccer"], limit=25,
                 selections=Selection("market_id", "title"),
             ),
             client.markets(
-                params={"input": {"sports": ["Basketball"], "limit": 25}},
+                sports=["Basketball"], limit=25,
                 selections=Selection("market_id", "title"),
             ),
             client.account(selections=Selection("available_balance", "loyalty_tier")),

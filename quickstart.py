@@ -16,10 +16,11 @@ from stx import STX, Selection
 
 def main() -> None:
     with STX(region="ontario", env="staging") as client:
-        client.login(params={})
+        client.login()
 
         page = client.markets(
-            params={"input": {"status": "OPEN", "limit": 5}},
+            status=["OPEN"],
+            limit=5,
             selections=Selection("market_id", "title", "status"),
         )
         print(f"Got {len(page)} of {page.count} open markets:")

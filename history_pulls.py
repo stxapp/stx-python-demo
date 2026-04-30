@@ -26,13 +26,13 @@ def _fmt_cents(c: int | None) -> str:
 
 def main() -> None:
     with STX(region="ontario", env="staging") as client:
-        client.login(params={})
+        client.login()
 
         # ---- Orders ---------------------------------------------------
         # ``client.orders`` returns Page[Order]; flat Selection auto-wraps
         # under the inner list field, no envelope boilerplate.
         orders = client.orders(
-            params={"pagination": {"page": 0, "limit": PAGE_LIMIT}},
+            pagination={"page": 0, "limit": PAGE_LIMIT},
             selections=Selection(
                 "id", "market_id", "status", "action",
                 "price", "quantity", "filled", "time",
@@ -51,7 +51,7 @@ def main() -> None:
         # ---- Trades ---------------------------------------------------
         # Trade.filled is the executed quantity (NOT `quantity`).
         trades = client.trades(
-            params={"pagination": {"page": 0, "limit": PAGE_LIMIT}},
+            pagination={"page": 0, "limit": PAGE_LIMIT},
             selections=Selection(
                 "id", "market_id", "action", "price", "filled",
                 "premium", "time",
@@ -71,7 +71,7 @@ def main() -> None:
         # `inserted_at_iso` is the human-readable ISO timestamp;
         # `realized_pnl` is profit/loss net of fees.
         settlements = client.settlements(
-            params={"pagination": {"page": 0, "limit": PAGE_LIMIT}},
+            pagination={"page": 0, "limit": PAGE_LIMIT},
             selections=Selection(
                 "id", "market_id", "type", "quantity",
                 "realized_pnl", "fee", "inserted_at_iso",

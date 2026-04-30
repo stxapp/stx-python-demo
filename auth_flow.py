@@ -27,7 +27,7 @@ def main() -> None:
 
     # ---- 1. Login (happy path) + 2. 2FA branch -----------------------
     try:
-        client.login(params={})
+        client.login()
     except STXTwoFactorRequiredException as exc:
         # Server sent a one-time code; collect from the user and confirm.
         # Falls through to a clear error if running non-interactively
@@ -42,7 +42,7 @@ def main() -> None:
                 file=sys.stderr,
             )
             raise SystemExit(1)
-        client.confirm_2fa(params={"code": code})
+        client.confirm_2fa(code=code)
     except STXAuthException as exc:
         print(f"Login failed: {exc.message}", file=sys.stderr)
         raise SystemExit(1)
@@ -63,7 +63,7 @@ def main() -> None:
     print(f"  tier:               {acct.loyalty_tier or '—'}")
 
     page = client.markets(
-        params={"input": {"limit": 3}},
+        limit=3,
         selections=Selection("market_id", "title"),
     )
     print(f"  markets reachable:  {len(page)} of {page.count}")

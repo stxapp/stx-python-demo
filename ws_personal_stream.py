@@ -28,7 +28,7 @@ async def stream() -> None:
     # Seed the User singleton — STXWebSocket needs the JWT but doesn't
     # log in on its own.
     with STX(region="ontario", env="staging") as client:
-        client.login(params={})
+        client.login()
 
     portfolio_frames = []
     order_frames = []

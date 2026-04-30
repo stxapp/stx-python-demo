@@ -39,7 +39,9 @@ def _find_tradable_market(client) -> str | None:
     """Pick any OPEN + currently-tradable market. Returns market_id, or
     None if the env has nothing to trade right now."""
     page = client.markets(
-        params={"input": {"status": "OPEN", "trading": "TRUE", "limit": 5}},
+        status=["OPEN"],
+        trading="TRUE",
+        limit=5,
         selections=Selection("market_id", "title"),
     )
     return page[0].market_id if len(page) else None
@@ -47,7 +49,7 @@ def _find_tradable_market(client) -> str | None:
 
 def main() -> None:
     with STX(region="ontario", env="staging") as client:
-        client.login(params={})
+        client.login()
 
         market_id = _find_tradable_market(client)
         if market_id is None:
@@ -69,15 +71,11 @@ def main() -> None:
             print(f"Placing 1¢ LIMIT BUY x{RESTING_BUY_QTY} on {market_id}...")
             try:
                 result = client.place_order(
-                    params={
-                        "user_order": {
-                            "market_id": market_id,
-                            "order_type": "LIMIT",
-                            "action": "BUY",
-                            "price": RESTING_BUY_PRICE,
-                            "quantity": RESTING_BUY_QTY,
-                        }
-                    },
+                    market_id=market_id,
+                    order_type="LIMIT",
+                    action="BUY",
+                    price=RESTING_BUY_PRICE,
+                    quantity=RESTING_BUY_QTY,
                     selections=Selection("errors", order=Selection("id", "status")),
                 )
             except STXException as exc:
@@ -96,10 +94,8 @@ def main() -> None:
 
             # Verify the order surfaces in the history.
             orders = client.orders(
-                params={
-                    "order_ids": [order_id],
-                    "pagination": {"page": 0, "limit": 1},
-                },
+                order_ids=[order_id],
+                pagination={"page": 0, "limit": 1},
                 selections=Selection("id", "status", "price", "quantity"),
             )
             if len(orders) == 1:
@@ -113,7 +109,7 @@ def main() -> None:
             # any survivors via cancel_all_orders.
             try:
                 client.cancel_order(
-                    params={"order_id": order_id},
+                    order_id=order_id,
                     selections=Selection("status"),
                 )
                 print(f"  → cancelled {order_id}")
