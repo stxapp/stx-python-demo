@@ -120,10 +120,6 @@ jobs:
 
       # ---- Async patterns -----------------------------------------
       - name: async_parallel_pulls
-        # Pre-existing race in the SDK's async auth wrapper (token
-        # refresh vs concurrent gather) trips this script intermittently.
-        # Tracked separately; don't block the smoke gate on it.
-        continue-on-error: true
         run: python async_parallel_pulls.py
 
       - name: async_with_ws
