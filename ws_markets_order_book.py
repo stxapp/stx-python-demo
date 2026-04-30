@@ -52,7 +52,8 @@ def _resolve_market_id(client: STX) -> str:
     if override:
         return override
     page = client.markets(
-        params={"input": {"status": "OPEN", "limit": 1}},
+        status=["OPEN"],
+        limit=1,
         selections=Selection("market_id", "title"),
     )
     if not len(page):
@@ -67,7 +68,7 @@ def _resolve_market_id(client: STX) -> str:
 
 async def stream() -> None:
     client = STX(region="ontario", env="staging")
-    client.login(params={})
+    client.login()
     target = _resolve_market_id(client)
 
     events: Counter = Counter()

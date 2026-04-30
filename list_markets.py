@@ -47,12 +47,14 @@ def _fmt_volume(v: int | None) -> str:
 
 def main() -> None:
     with STX(region="ontario", env="staging") as client:
-        client.login(params={})
+        client.login()
 
         # Fetch a healthy slice — server-side filters narrow to currently-
         # tradable markets; client-side sort by volume picks the top N.
         page = client.markets(
-            params={"input": {"status": "OPEN", "trading": "TRUE", "limit": 200}},
+            status=["OPEN"],
+            trading="TRUE",
+            limit=200,
             selections=Selection(
                 "market_id", "sport", "title", "status", "price",
                 "probability", "volume24h",

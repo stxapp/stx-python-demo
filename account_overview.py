@@ -34,7 +34,7 @@ def _fmt_us(us: int | None) -> str:
 
 def main() -> None:
     with STX(region="ontario", env="staging") as client:
-        client.login(params={})
+        client.login()
 
         # 1. Balances + tier — one query, narrow selection.
         acct = client.account(
@@ -63,7 +63,7 @@ def main() -> None:
         print(f"\nLoyalty activity (last 5)")
         try:
             loyalty = client.loyalty_history(
-                params={"pagination": {"page": 0, "limit": 5}},
+                pagination={"page": 0, "limit": 5},
                 selections=Selection("inserted_at", "type", "amount", "points"),
             )
             if not loyalty:
@@ -88,7 +88,7 @@ def main() -> None:
         print(f"\nPer-market stats (top 10)")
         try:
             stats = client.account_market_stats(
-                params={"pagination": {"page": 0, "limit": 10}},
+                pagination={"page": 0, "limit": 10},
                 selections=Selection(
                     "market_id", "title", "contracts_settled",
                     "total_fees", "total_settlement_pnl", "updated_at",

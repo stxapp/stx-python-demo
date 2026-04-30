@@ -67,7 +67,7 @@ def _render_books() -> None:
 
 async def stream() -> None:
     with STX(region="ontario", env="staging") as client:
-        client.login(params={})
+        client.login()
 
     events: Counter = Counter()
 

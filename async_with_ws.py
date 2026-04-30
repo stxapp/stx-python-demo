@@ -27,7 +27,7 @@ LOOKUP_AT_MOST = 3   # Cap the HTTP fan-out so the demo stays bounded.
 
 async def main() -> None:
     async with AsyncSTX(region="ontario", env="staging") as client:
-        await client.login(params={})
+        await client.login()
 
         seen_market_ids: set[str] = set()
         lookup_count = 0
@@ -44,7 +44,7 @@ async def main() -> None:
             # WS event → HTTP lookup. In a real bot this is where you'd
             # decide whether to quote, hedge, or no-op.
             page = await client.markets(
-                params={"input": {"market_ids": [mid]}},
+                market_ids=[mid],
                 selections=Selection("market_id", "title", "price", "probability"),
             )
             if len(page):
