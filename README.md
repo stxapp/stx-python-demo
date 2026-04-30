@@ -43,11 +43,24 @@ All read from `STX_EMAIL` / `STX_PASSWORD` (set them in your shell or copy [`.en
 |---|---|
 | [`safe_order_round_trip.py`](./safe_order_round_trip.py) | Place a 1¢ LIMIT BUY (never fills), verify it appears in history, cancel it. Try/finally cleanup. |
 
-### WebSocket streaming
+### WebSocket streaming — markets channel
+
+The broadcast `markets` channel supports server-side filtering on `fields`, `rule_filters`, and `message_types`, plus dynamic re-selection after join. Each script is a 30-second listener focused on one capability.
 
 | Script | Scenario |
 |---|---|
-| [`ws_market_stream.py`](./ws_market_stream.py) | Subscribe to the broadcast `MARKETS` channel; print frames for 30 s. |
+| [`ws_markets_basic.py`](./ws_markets_basic.py) | Default join — every field, every rule, both message types. |
+| [`ws_markets_bids_offers.py`](./ws_markets_bids_offers.py) | Narrow `fields` to `["bids", "offers"]` for liquidity-only feeds. |
+| [`ws_markets_rule_filters.py`](./ws_markets_rule_filters.py) | Server-side filter to specific market rule types (e.g. `spread`, `home_winner`). |
+| [`ws_markets_message_types.py`](./ws_markets_message_types.py) | Receive only `market_updated` events; skip `market_created`. |
+| [`ws_markets_dynamic.py`](./ws_markets_dynamic.py) | Change filters mid-stream via `ws.push(...)` — `select_fields`, `select_rule_filters`. |
+| [`ws_markets_order_book.py`](./ws_markets_order_book.py) | Pin to one market_id and render its top-of-book. Auto-discovers an OPEN market if `STX_MARKET_ID` is unset. |
+| [`ws_markets_multi_order_book.py`](./ws_markets_multi_order_book.py) | Maintain a dict of order books for every market matching a rule filter. |
+
+### WebSocket streaming — user streams
+
+| Script | Scenario |
+|---|---|
 | [`ws_personal_stream.py`](./ws_personal_stream.py) | Subscribe to per-user `PORTFOLIO` + `ORDERS` (auto-scoped to your uid). |
 
 ### Async patterns
