@@ -5,8 +5,8 @@ for the server total. Useful for reconciliation, end-of-session
 reports, and tax export.
 
 Run:
-    export STX_EMAIL="you@example.com"
-    export STX_PASSWORD="..."
+    export STX_KEY_ID="your-key-id"
+    export STX_PRIVATE_KEY="$HOME/.stx/us-demo.pem"
     python history_pulls.py
 
 Note: monetary fields on the wire are integer cents; divide by 100
@@ -27,8 +27,6 @@ def _fmt_cents(c: int | None) -> str:
 
 def main() -> None:
     with make_client() as client:
-        client.login()
-
         # ---- Orders ---------------------------------------------------
         # ``client.orders`` returns Page[Order]; flat Selection auto-wraps
         # under the inner list field, no envelope boilerplate.
@@ -70,7 +68,8 @@ def main() -> None:
 
         # ---- Settlements ----------------------------------------------
         # `inserted_at_iso` is the human-readable ISO timestamp;
-        # `realized_pnl` is profit/loss net of fees.
+        # `realized_pnl` is profit/loss net of fees; `type` is a
+        # SettlementType enum, so print its `.value`.
         settlements = client.settlements(
             pagination={"page": 0, "limit": PAGE_LIMIT},
             selections=Selection(
@@ -82,7 +81,7 @@ def main() -> None:
         for s in settlements:
             print(
                 f"  {(s.id or '-'):<14} {(s.market_id or '-'):<14} "
-                f"{(s.type or '-'):<10} "
+                f"{getattr(s.type, 'value', s.type) or '-':<14} "
                 f"qty={s.quantity or 0:>5}  "
                 f"pnl={_fmt_cents(s.realized_pnl)}  "
                 f"fee={_fmt_cents(s.fee)}  {s.inserted_at_iso or ''}"

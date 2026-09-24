@@ -6,13 +6,16 @@ agree on three things:
 1. **Where to connect.** The SDK reads ``STX_REGION`` / ``STX_ENV`` (or
    ``STX_HOST``) from the environment. When none of them is set, the
    scripts default to the public US demo environment (``region="us"``,
-   ``env="demo"``, host ``demo.stxapp.io``), which uses no real money.
-   Nothing is hardcoded in the individual scripts, so setting an
-   environment variable is enough to point every example somewhere else.
+   ``env="demo"``), which uses no real money. Nothing is hardcoded in
+   the individual scripts, so setting an environment variable is enough
+   to point every example somewhere else.
 
-2. **Credentials.** ``STX_EMAIL`` / ``STX_PASSWORD`` are read by the SDK
-   itself. This module only checks that they are present and prints a
+2. **Credentials.** ``STX_KEY_ID`` / ``STX_PRIVATE_KEY`` are read by the
+   SDK itself and every request is signed with them; there is no login
+   call. This module only checks that they are present and prints a
    short, readable message (instead of a traceback) when they are not.
+   If ``STX_PROFILE`` names a profile in ``~/.stx/credentials`` the
+   check is skipped and the SDK reads the key from there.
 
 3. **The ``.env`` file.** If a ``.env`` file sits next to this module it
    is loaded into the process environment before anything else runs.
@@ -23,7 +26,7 @@ Usage from a script::
     from demo_config import make_client
 
     with make_client() as client:
-        client.login()
+        me = client.me()
         ...
 
 ``make_async_client()`` and ``make_ws()`` do the same for ``AsyncSTX``
@@ -36,29 +39,22 @@ import sys
 from pathlib import Path
 
 from stx import STX, AsyncSTX, STXWebSocket
-from stx.exceptions import STXConfigException
 
 DEFAULT_REGION = "us"
 DEFAULT_ENV = "demo"
 
-# Public demo hosts, used only when the installed SDK does not know the
-# (region, env) pair yet. Once the SDK ships with these hosts this table
-# is never consulted.
-_FALLBACK_HOSTS = {
-    ("us", "demo"): "demo.stxapp.io",
-    ("ontario", "demo"): "demo.stxapp.ca",
-}
-
 _ENV_FILE = Path(__file__).resolve().parent / ".env"
 
 _MISSING_CREDENTIALS_MESSAGE = """\
-No STX credentials found.
+No STX API key found.
 
-These examples read STX_EMAIL and STX_PASSWORD from the environment.
-Export them in your shell, or copy .env.example to .env next to the
-scripts and fill in your account details. Accounts for the demo
-environment are free to create at https://demo.stxapp.io and use no
-real money. The README's Configuration section lists every variable.
+These examples read STX_KEY_ID and STX_PRIVATE_KEY from the environment.
+Create a key under Account, API Keys in the STX app, save the private
+key to a file such as ~/.stx/us-demo.pem, then either export the two
+variables in your shell or copy .env.example to .env next to the
+scripts and fill them in. Accounts for the demo environment are free to
+create at https://demo.stxapp.io and use no real money. The README's
+Configuration section lists every variable.
 """
 
 
@@ -83,9 +79,11 @@ def load_dotenv(path: Path = _ENV_FILE) -> None:
 
 
 def require_credentials() -> None:
-    """Exit with a friendly message if STX_EMAIL / STX_PASSWORD are unset."""
+    """Exit with a friendly message if no API key is configured."""
     load_dotenv()
-    if os.getenv("STX_EMAIL") and os.getenv("STX_PASSWORD"):
+    if os.getenv("STX_PROFILE"):
+        return
+    if os.getenv("STX_KEY_ID") and os.getenv("STX_PRIVATE_KEY"):
         return
     print(_MISSING_CREDENTIALS_MESSAGE, file=sys.stderr)
     raise SystemExit(1)
@@ -116,14 +114,7 @@ def describe_target() -> str:
 
 def _build(cls, **extra):
     require_credentials()
-    kwargs = connection_kwargs()
-    try:
-        return cls(**kwargs, **extra)
-    except STXConfigException:
-        fallback = _FALLBACK_HOSTS.get((kwargs.get("region"), kwargs.get("env")))
-        if fallback is None:
-            raise
-        return cls(host=fallback, **extra)
+    return cls(**connection_kwargs(), **extra)
 
 
 def make_client(**kwargs) -> STX:

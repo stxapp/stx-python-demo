@@ -2,12 +2,13 @@
 
 Subscribes to the user-scoped channels: ``PORTFOLIO`` (balance / PnL
 ticks) and ``ORDERS`` (status transitions on your resting orders).
-Both auto-attach your uid as the topic scope; you don't construct
-``"portfolio:<your-uid>"`` strings yourself.
+Both auto-attach your user id as the topic scope; you don't construct
+``"portfolio:<your-user-id>"`` strings yourself. One ``me()`` call at
+startup is what supplies that id.
 
 Run:
-    export STX_EMAIL="you@example.com"
-    export STX_PASSWORD="..."
+    export STX_KEY_ID="your-key-id"
+    export STX_PRIVATE_KEY="$HOME/.stx/us-demo.pem"
     python ws_personal_stream.py
 
 The script doesn't generate any activity itself. For a guaranteed
@@ -21,14 +22,16 @@ from stx.enums import Channels
 
 from demo_config import make_client, make_ws
 
-LISTEN_WINDOW_SECONDS = 30
+LISTEN_WINDOW_SECONDS = 20
 
 
 async def stream() -> None:
-    # Seed the User singleton: STXWebSocket needs the JWT but doesn't
-    # log in on its own.
+    # There is no login response under API-key auth, so the user id the
+    # per-user topics need has to be fetched once. me() seeds it for every
+    # client in the process; do this before joining any scoped channel.
     with make_client() as client:
-        client.login()
+        me = client.me()
+    print(f"Authenticated as {me.user_id}")
 
     portfolio_frames = []
     order_frames = []
@@ -43,7 +46,7 @@ async def stream() -> None:
 
     async with make_ws() as ws:
         # Per-user channels: `SCOPED_CHANNELS` includes PORTFOLIO and
-        # ORDERS, so join() auto-attaches `:<your-uid>` to the wire topic.
+        # ORDERS, so join() auto-attaches `:<your-user-id>` to the wire topic.
         await ws.join(Channels.PORTFOLIO, on_message=on_portfolio)
         await ws.join(Channels.ORDERS, on_message=on_order)
 

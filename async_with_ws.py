@@ -6,12 +6,13 @@ look up the market's full state via HTTP. That's the shape most
 trading bots use: WS for low-latency events, HTTP for queries and
 order placement.
 
-Both clients share the same ``User`` singleton, so a single login
-authorises both.
+Both clients sign their own traffic with the same API key, so there
+is nothing to log in to first. The markets channel is a broadcast and
+needs no user id.
 
 Run:
-    export STX_EMAIL="you@example.com"
-    export STX_PASSWORD="..."
+    export STX_KEY_ID="your-key-id"
+    export STX_PRIVATE_KEY="$HOME/.stx/us-demo.pem"
     python async_with_ws.py
 """
 import asyncio
@@ -22,23 +23,24 @@ from stx.enums import Channels
 
 from demo_config import make_async_client, make_ws
 
-LISTEN_WINDOW_SECONDS = 30
+LISTEN_WINDOW_SECONDS = 20
 LOOKUP_AT_MOST = 3   # Cap the HTTP fan-out so the demo stays bounded.
 
 
 async def main() -> None:
     async with make_async_client() as client:
-        await client.login()
-
         seen_market_ids: set[str] = set()
         lookup_count = 0
 
         async def on_market(msg) -> None:
             nonlocal lookup_count
-            mid = (msg.payload or {}).get("market_id")
-            if not mid or mid in seen_market_ids:
+            if msg.is_reply:
                 return
-            if lookup_count >= LOOKUP_AT_MOST:
+            # Frames are dicts keyed by market_id; take the first new one.
+            mid = next(
+                (k for k in (msg.payload or {}) if k not in seen_market_ids), None
+            )
+            if not mid or lookup_count >= LOOKUP_AT_MOST:
                 return
             seen_market_ids.add(mid)
             lookup_count += 1

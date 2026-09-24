@@ -3,6 +3,7 @@ trading round-trip.
 
 What this proves:
 
+- ``me()`` reports the key's scope; only a ``read_write`` key may trade.
 - ``place_order`` mutation works against your account (and shows you
   what error you'd see if it doesn't: geo-block, no trading rights
   and similar are surfaced as ``STXException`` with a clear message).
@@ -19,8 +20,8 @@ Why it's safe to run end-to-end:
   raises mid-flow.
 
 Run:
-    export STX_EMAIL="you@example.com"
-    export STX_PASSWORD="..."
+    export STX_KEY_ID="your-key-id"
+    export STX_PRIVATE_KEY="$HOME/.stx/us-demo.pem"
     python safe_order_round_trip.py
 """
 from __future__ import annotations  # `str | None` in helper signatures (3.9 compat)
@@ -29,6 +30,7 @@ import sys
 
 from stx import Selection
 from stx.exceptions import STXException
+from stx.models import AccessScope
 
 from demo_config import make_client
 
@@ -50,7 +52,18 @@ def _find_tradable_market(client) -> str | None:
 
 def main() -> None:
     with make_client() as client:
-        client.login()
+        # An API key is issued as read_only or read_write; only the latter
+        # may place or cancel orders. Check up front instead of discovering
+        # it from a rejected place_order.
+        me = client.me()
+        if me.scope != AccessScope.READ_WRITE:
+            print(
+                f"This key has scope {me.scope.value if me.scope else 'unknown'}; "
+                "placing orders needs READ_WRITE. Create a read_write key to run "
+                "this example.",
+                file=sys.stderr,
+            )
+            raise SystemExit(0)
 
         market_id = _find_tradable_market(client)
         if market_id is None:

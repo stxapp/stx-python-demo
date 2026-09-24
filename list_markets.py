@@ -9,8 +9,8 @@ Sorts by 24-hour volume and prints a clean table:
     ...
 
 Run:
-    export STX_EMAIL="you@example.com"
-    export STX_PASSWORD="..."
+    export STX_KEY_ID="your-key-id"
+    export STX_PRIVATE_KEY="$HOME/.stx/us-demo.pem"
     python list_markets.py
 
 Note on field shaping: ``client.markets()`` returns a ``Page[MarketInfo]``;
@@ -48,8 +48,6 @@ def _fmt_volume(v: int | None) -> str:
 
 def main() -> None:
     with make_client() as client:
-        client.login()
-
         # Fetch a healthy slice: server-side filters narrow to currently-
         # tradable markets; client-side sort by volume picks the top N.
         page = client.markets(
@@ -62,12 +60,10 @@ def main() -> None:
             ),
         )
 
-        # Page acts like a list: sort and slice as usual.
-        active = sorted(
-            (m for m in page if m.volume24h is not None),
-            key=lambda m: m.volume24h or 0,
-            reverse=True,
-        )[:TOP_N]
+        # Page acts like a list: sort and slice as usual. Markets that have
+        # not traded in the last day carry no volume and sort to the end,
+        # so a quiet environment still shows something to look at.
+        active = sorted(page, key=lambda m: m.volume24h or 0, reverse=True)[:TOP_N]
 
         print(f"Top {len(active)} active markets (of {page.count} open / tradable)\n")
         header = (

@@ -1,12 +1,19 @@
-"""Account overview: balances, loyalty tier, per-market positions.
+"""Account overview: identity, cash movements, loyalty, per-market positions.
 
-Read-only snapshot of everything the SDK exposes about your STX
-account. Useful as a first authenticated call after login (proves
-auth works) and as a starting point for portfolio-tracking scripts.
+Read-only snapshot of what an API key can see about your STX account.
+Useful as a first authenticated call (proves the key works) and as a
+starting point for portfolio-tracking scripts.
+
+An API key authenticates a trading integration rather than a person's
+account settings, so the ``account`` and ``user_profile`` operations
+are reserved for the session login path and rejected for a key. What a
+key can read: ``me``, ``my_deposit_and_withdrawal_history``,
+``loyalty_history``, ``account_market_stats``, plus every market,
+order, trade and settlement query.
 
 Run:
-    export STX_EMAIL="you@example.com"
-    export STX_PASSWORD="..."
+    export STX_KEY_ID="your-key-id"
+    export STX_PRIVATE_KEY="$HOME/.stx/us-demo.pem"
     python account_overview.py
 
 Note: monetary fields on the wire are integer cents; divide by 100
@@ -17,6 +24,7 @@ from __future__ import annotations  # PEP 604 union syntax in helpers (3.9 compa
 from datetime import datetime, timezone
 
 from stx import Selection
+from stx.exceptions import STXException
 
 from demo_config import make_client
 
@@ -36,32 +44,35 @@ def _fmt_us(us: int | None) -> str:
 
 def main() -> None:
     with make_client() as client:
-        client.login()
+        # 1. Who the key belongs to.
+        me = client.me()
+        print("Identity")
+        print(f"  user_id:      {me.user_id}")
+        print(f"  account_id:   {me.account_id}")
+        print(f"  scope:        {me.scope.value if me.scope else '-'}")
 
-        # 1. Balances + tier, one query, narrow selection.
-        acct = client.account(
-            selections=Selection(
-                "account_balance",
-                "available_balance",
-                "loyalty_tier",
-                "total_deposits",
-                "total_withdrawals",
-                "points",
+        # 2. Deposits and withdrawals, most recent first. Items are
+        # TransactionHistory rows with a `type` of deposit / withdrawal.
+        print("\nDeposits and withdrawals (last 5)")
+        try:
+            moves = client.my_deposit_and_withdrawal_history(
+                selections=Selection("inserted_at", "type", "amount", "method"),
             )
-        )
-        print("Balances")
-        print(f"  total:        {_fmt_cents(acct.account_balance)}")
-        print(f"  available:    {_fmt_cents(acct.available_balance)}")
-        print(f"  deposits:     {_fmt_cents(acct.total_deposits)}")
-        print(f"  withdrawals:  {_fmt_cents(acct.total_withdrawals)}")
-        print(f"  tier:         {acct.loyalty_tier or '-'}")
-        print(f"  points:       {acct.points or 0:>10,.2f}")
+            if not moves:
+                print("  (none)")
+            for t in list(moves)[:5]:
+                print(
+                    f"  {_fmt_us(t.inserted_at):<17} "
+                    f"{(t.type or '-'):<12} "
+                    f"amount={_fmt_cents(t.amount)}  "
+                    f"{t.method or '-'}"
+                )
+        except STXException as exc:
+            print(f"  (server error, skipping: {type(exc).__name__})")
 
-        # 2. Loyalty history, recent point-bearing transactions. Items
-        # are TransactionHistory; loyalty rows have a non-null `points`.
-        # Wrapped because the loyalty op can intermittently return 500s
-        # (server-side, not SDK); we don't want a transient backend
-        # issue to mask the rest of the demo.
+        # 3. Loyalty history, recent point-bearing transactions. Wrapped
+        # because this operation can intermittently return a server
+        # error, and a backend hiccup should not mask the rest of the demo.
         print("\nLoyalty activity (last 5)")
         try:
             loyalty = client.loyalty_history(
@@ -77,16 +88,11 @@ def main() -> None:
                     f"amount={_fmt_cents(h.amount)}  "
                     f"points={h.points or 0:>+8.2f}"
                 )
-        except Exception as exc:
-            # Broad catch on purpose: transient backend 500s
-            # surface as urllib3 RetryError (not classified as STXException
-            # in this SDK version), and the demo shouldn't fail end-to-end
-            # because of a server hiccup. Pin to STXException once the
-            # SDK upgrades its retry classifier.
+        except STXException as exc:
             print(f"  (server error, skipping: {type(exc).__name__})")
 
-        # 3. Per-market stats, your position / fees / settled-contracts
-        # across every market you've traded. Empty if you've never traded.
+        # 4. Per-market stats: your position, fees and settled contracts
+        # across every market you have traded. Empty if you never traded.
         print("\nPer-market stats (top 10)")
         try:
             stats = client.account_market_stats(
@@ -107,12 +113,7 @@ def main() -> None:
                     f"pnl={_fmt_cents(s.total_settlement_pnl)}  "
                     f"updated={_fmt_us(s.updated_at)}"
                 )
-        except Exception as exc:
-            # Broad catch on purpose: transient backend 500s
-            # surface as urllib3 RetryError (not classified as STXException
-            # in this SDK version), and the demo shouldn't fail end-to-end
-            # because of a server hiccup. Pin to STXException once the
-            # SDK upgrades its retry classifier.
+        except STXException as exc:
             print(f"  (server error, skipping: {type(exc).__name__})")
 
 
