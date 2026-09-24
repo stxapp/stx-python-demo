@@ -10,6 +10,8 @@ Run:
     python account_overview.py
 """
 
+from decimal import Decimal
+
 from stx import STXNotFoundException
 
 from demo_config import make_client
@@ -38,7 +40,8 @@ def main() -> None:
 
         print("\nOpen positions")
         try:
-            positions = [p for p in client.positions() if p.position not in (None, "0.00")]
+            # Compare as Decimal: a flat position can read "0.00" or "-0.00".
+            positions = [p for p in client.positions() if p.position and Decimal(p.position)]
             if not positions:
                 print("  (none)")
             for p in positions[:10]:

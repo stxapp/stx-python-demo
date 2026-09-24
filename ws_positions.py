@@ -11,6 +11,7 @@ Run:
 """
 
 import asyncio
+from decimal import Decimal
 
 from demo_config import listen, make_async_client, seconds_arg
 
@@ -25,7 +26,7 @@ async def main(seconds: float) -> None:
             positions = await ws.positions()
             print(f"Joined {positions.topic}: {positions.reply}")
             held = (await positions.wait_snapshot())["all_positions"]["positions"]
-            nonzero = [p for p in held if p["position"] != "0.00"]
+            nonzero = [p for p in held if Decimal(p["position"])]  # "-0.00" is flat too
             print(f"Snapshot: {len(held)} position record(s), {len(nonzero)} non-zero")
             for p in nonzero[:5]:
                 print(
