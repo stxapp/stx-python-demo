@@ -1,11 +1,11 @@
 # stx-python-demo
 
-Runnable Python examples for the **STX Python SDK** (`stx-python`, imported as `stx`). Each script is a small, self-contained workflow, such as logging in, browsing markets, placing a safe order or streaming live updates, that you can copy as the starting point for your own bot or research code.
+Runnable Python examples for the **STX Python SDK** (`stx-python`, imported as `stx`). Each script is a small, self-contained workflow, such as checking who your API key belongs to, browsing markets, placing a safe order or streaming live updates, that you can copy as the starting point for your own bot or research code.
 
 ## Prerequisites
 
 - Python 3.9 or newer
-- An STX account on the environment you plan to target. The scripts default to the US demo environment at `demo.stxapp.io`, which uses no real money; register there to get started.
+- An STX account on the environment you plan to target, and an API key for it. The scripts default to the US demo environment at `demo.stxapp.io`, which uses no real money; register there to get started.
 
 ## Install
 
@@ -17,24 +17,30 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-The SDK itself installs with `pip install stx-python`. Until its first release on PyPI it is published to TestPyPI as a pre-release, so [`requirements.txt`](./requirements.txt) carries the index lines that point pip at TestPyPI for this one package. Once the SDK is on PyPI that file becomes a single `stx-python` line and the plain `pip install` is all you need.
+The SDK itself installs with `pip install stx-python`, and [`requirements.txt`](./requirements.txt) pins `stx-python>=0.6.0`, the first release with API-key support. That release is not on PyPI yet, so until it lands the `pip install -r requirements.txt` line above cannot resolve; install the SDK from a built wheel instead and skip that line. Once 0.6.0 is published, the plain `pip install -r requirements.txt` is all you need.
+
+```bash
+pip install /path/to/stx_python-<version>-py3-none-any.whl
+```
 
 ## 60-second quickstart
 
+Create an API key under **Account, API Keys** in the STX app. You get a key id and an Ed25519 private key; save the key to a file such as `~/.stx/us-demo.pem`.
+
 ```bash
-cp .env.example .env      # then fill in STX_EMAIL and STX_PASSWORD
+cp .env.example .env      # then fill in STX_KEY_ID and STX_PRIVATE_KEY
 python quickstart.py
 ```
 
 The scripts load `.env` automatically. If you prefer, export the variables in your shell instead:
 
 ```bash
-export STX_EMAIL="you@example.com"
-export STX_PASSWORD="your-password"
+export STX_KEY_ID="your-key-id"
+export STX_PRIVATE_KEY="$HOME/.stx/us-demo.pem"
 python quickstart.py
 ```
 
-When the credentials are missing, every script prints a short explanation and exits instead of a traceback.
+There is no login call: every request, and the WebSocket handshake, is signed with the key. When the credentials are missing, every script prints a short explanation and exits instead of a traceback.
 
 ## Examples
 
@@ -42,26 +48,26 @@ When the credentials are missing, every script prints a short explanation and ex
 
 | Script | What it shows |
 |---|---|
-| [`quickstart.py`](./quickstart.py) | Smallest possible example: log in and pull a few open markets. |
-| [`auth_flow.py`](./auth_flow.py) | The three branches a production caller handles: plain login, the 2FA challenge, and automatic token refresh. |
+| [`quickstart.py`](./quickstart.py) | Smallest possible example: `me()` to confirm the key, then a few open markets. |
+| [`identity.py`](./identity.py) | What `me()` tells you (user id, account id, scope, method) and the two errors an API key can hit. |
 
 ### Read-only data
 
 | Script | What it shows |
 |---|---|
 | [`list_markets.py`](./list_markets.py) | Top-N most-active OPEN markets in a table, the view you open to find something to trade. |
-| [`account_overview.py`](./account_overview.py) | Balances, loyalty tier, per-market position stats. |
+| [`account_overview.py`](./account_overview.py) | Identity, deposits and withdrawals, loyalty activity, per-market position stats. |
 | [`history_pulls.py`](./history_pulls.py) | Paginated `orders`, `trades` and `settlements` using `Page[T]`. |
 
 ### Trading
 
 | Script | What it shows |
 |---|---|
-| [`safe_order_round_trip.py`](./safe_order_round_trip.py) | Place a 1 cent LIMIT BUY that never fills, confirm it appears in history, cancel it. Cleans up in a `finally` block. |
+| [`safe_order_round_trip.py`](./safe_order_round_trip.py) | Check the key's scope, place a 1 cent LIMIT BUY that never fills, confirm it appears in history, cancel it. Cleans up in a `finally` block. |
 
 ### WebSocket streaming: markets channel
 
-The broadcast `markets` channel supports server-side filtering on `fields`, `rule_filters` and `message_types`, plus dynamic re-selection after joining. Each script listens for about 30 seconds and focuses on one capability.
+The broadcast `markets` channel supports server-side filtering on `fields`, `rule_filters` and `message_types`, plus dynamic re-selection after joining. Each script listens for about 20 seconds and focuses on one capability.
 
 | Script | What it shows |
 |---|---|
@@ -75,9 +81,19 @@ The broadcast `markets` channel supports server-side filtering on `fields`, `rul
 
 ### WebSocket streaming: your account
 
+Per-user channels are keyed on your user id. Under API-key authentication there is no login response to read it from, so each of these scripts calls `client.me()` once before joining; that seeds the id for every client in the process.
+
 | Script | What it shows |
 |---|---|
 | [`ws_personal_stream.py`](./ws_personal_stream.py) | Subscribe to the per-user `PORTFOLIO` and `ORDERS` channels (scoped to your account automatically). |
+| [`ws_trades_stream.py`](./ws_trades_stream.py) | Subscribe to `TRADES`: your fills as they land, instead of polling `trades()`. |
+| [`ws_settlements_stream.py`](./ws_settlements_stream.py) | Subscribe to `SETTLEMENTS`: a frame each time one of your positions resolves. |
+
+### Long-running
+
+| Script | What it shows |
+|---|---|
+| [`worker.py`](./worker.py) | The bot skeleton: one socket, `MARKETS` (bids and offers) plus your own `ORDERS`, printing events until Ctrl-C. `--seconds N` bounds the run. |
 
 ### Async patterns
 
@@ -92,14 +108,17 @@ All scripts build their client through [`demo_config.py`](./demo_config.py), whi
 
 | Variable | Purpose |
 |---|---|
-| `STX_EMAIL` | Your STX account email. |
-| `STX_PASSWORD` | Your STX account password. |
+| `STX_KEY_ID` | Your API key id. |
+| `STX_PRIVATE_KEY` | Path to the key's Ed25519 PEM file, or the PEM text itself. |
+| `STX_PROFILE` | Optional. A profile name in `~/.stx/credentials` to read the key from instead of the two variables above. |
 | `STX_REGION` | `us` or `ontario`. Default: `us`. |
 | `STX_ENV` | `demo` or `production`. Default: `demo`. |
 | `STX_HOST` | Optional. A hostname that overrides `STX_REGION` and `STX_ENV` entirely. |
 | `STX_MARKET_ID` | Optional. Pins `ws_markets_order_book.py` to one market. |
 
-The SDK reads these variables itself, with explicit constructor arguments taking precedence over the environment and the environment over a profile in `~/.stx/credentials`. The scripts pass no hardcoded region or environment, so the variables are honoured. Accounts do not carry across exchanges: an account registered on the US demo does not log in to the Ontario one.
+The SDK reads these variables itself, with explicit constructor arguments taking precedence over the environment and the environment over a profile in `~/.stx/credentials`. The scripts pass no hardcoded region or environment, so the variables are honoured. Accounts and API keys do not carry across exchanges: a key issued for the US demo does not authenticate against the Ontario one.
+
+An API key is issued as `read_only` or `read_write`. Market data and history work with either; placing or cancelling orders needs `read_write`. `identity.py` shows which one you hold.
 
 The demo environments use no real money. `production` is live money; point a script there only after you have read what it does.
 
@@ -108,7 +127,7 @@ The demo environments use no real money. `production` is live money; point a scr
 Two workflows run on every pull request:
 
 - [`lint.yml`](./.github/workflows/lint.yml) runs `ruff` and byte-compiles every script. It needs no credentials.
-- [`smoke.yml`](./.github/workflows/smoke.yml) runs every example end to end against a live environment using repository secrets. A failure there means the SDK or the API contract drifted.
+- [`smoke.yml`](./.github/workflows/smoke.yml) runs every example end to end against the US demo environment using repository secrets (`STX_KEY_ID` and `STX_PRIVATE_KEY`, the latter holding the PEM text). A failure there means the SDK or the API contract drifted.
 
 No credentials are stored in the repo.
 

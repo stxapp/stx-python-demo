@@ -28,7 +28,7 @@ ruff check .
 python3 -m py_compile *.py
 
 # If your change affects an example, run it once against the demo environment:
-export STX_EMAIL=... STX_PASSWORD=...
+export STX_KEY_ID=... STX_PRIVATE_KEY=$HOME/.stx/us-demo.pem
 python3 quickstart.py   # or whichever file you changed
 ```
 
@@ -38,7 +38,7 @@ Keep diffs small and focused. One concern per PR makes review cheap. Build the c
 
 - Breaking changes to the shape of these examples without prior agreement. They are public reference material and stability matters.
 - Examples that need unreleased or private SDK versions. Everything here must work against the latest published `stx-python`.
-- Credentials, tokens, or any real account data, in code or in example configs.
+- Credentials, private keys, or any real account data, in code or in example configs.
 
 ## Code of conduct
 
