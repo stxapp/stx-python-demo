@@ -1,10 +1,13 @@
 # stx-python-demo
 
-Runnable Python examples for trading on STX. Each script is a self-contained workflow — log in, browse markets, place a safe order, stream live updates — that you can copy as the starting point for your own bot or research code.
+Runnable Python examples for the **STX Python SDK** (`stx-python`, imported as `stx`). Each script is a small, self-contained workflow, such as logging in, browsing markets, placing a safe order or streaming live updates, that you can copy as the starting point for your own bot or research code.
+
+## Prerequisites
+
+- Python 3.9 or newer
+- An STX account on the environment you plan to target. The scripts default to the US demo environment at `demo.stxapp.io`, which uses no real money; register there to get started.
 
 ## Install
-
-The pin and index-urls live in [`requirements.txt`](./requirements.txt) — clone the repo and run:
 
 ```bash
 git clone https://github.com/stxapp/stx-python-demo.git
@@ -14,61 +17,76 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-`stx-python` is currently in pre-release on TestPyPI. `requirements.txt` always pulls the latest published version (the `--pre` flag enables alpha/beta resolution); once we ship 1.0 to main PyPI the file collapses to a single `stx-python` line.
+The SDK itself installs with `pip install stx-python`. Until its first release on PyPI it is published to TestPyPI as a pre-release, so [`requirements.txt`](./requirements.txt) carries the index lines that point pip at TestPyPI for this one package. Once the SDK is on PyPI that file becomes a single `stx-python` line and the plain `pip install` is all you need.
 
-If you'd rather not clone, `pip install -r https://raw.githubusercontent.com/stxapp/stx-python-demo/main/requirements.txt` works too.
+## 60-second quickstart
+
+```bash
+cp .env.example .env      # then fill in STX_EMAIL and STX_PASSWORD
+python quickstart.py
+```
+
+The scripts load `.env` automatically. If you prefer, export the variables in your shell instead:
+
+```bash
+export STX_EMAIL="you@example.com"
+export STX_PASSWORD="your-password"
+python quickstart.py
+```
+
+When the credentials are missing, every script prints a short explanation and exits instead of a traceback.
 
 ## Examples
 
-All read from `STX_EMAIL` / `STX_PASSWORD` (set them in your shell or copy [`.env.example`](./.env.example) to `.env`). All target Ontario staging by default.
-
 ### Getting started
 
-| Script | Scenario |
+| Script | What it shows |
 |---|---|
-| [`quickstart.py`](./quickstart.py) | Smallest possible Hello World — log in and pull a few open markets. |
-| [`auth_flow.py`](./auth_flow.py) | The three branches every production caller handles: happy login, 2FA challenge, manual token refresh. |
+| [`quickstart.py`](./quickstart.py) | Smallest possible example: log in and pull a few open markets. |
+| [`auth_flow.py`](./auth_flow.py) | The three branches a production caller handles: plain login, the 2FA challenge, and automatic token refresh. |
 
 ### Read-only data
 
-| Script | Scenario |
+| Script | What it shows |
 |---|---|
-| [`list_markets.py`](./list_markets.py) | Top-N most-active OPEN markets in a clean table — what you'd open to find something to trade. |
+| [`list_markets.py`](./list_markets.py) | Top-N most-active OPEN markets in a table, the view you open to find something to trade. |
 | [`account_overview.py`](./account_overview.py) | Balances, loyalty tier, per-market position stats. |
-| [`history_pulls.py`](./history_pulls.py) | Paginated `orders` / `trades` / `settlements` — uses `Page[T]` semantics. |
+| [`history_pulls.py`](./history_pulls.py) | Paginated `orders`, `trades` and `settlements` using `Page[T]`. |
 
 ### Trading
 
-| Script | Scenario |
+| Script | What it shows |
 |---|---|
-| [`safe_order_round_trip.py`](./safe_order_round_trip.py) | Place a 1¢ LIMIT BUY (never fills), verify it appears in history, cancel it. Try/finally cleanup. |
+| [`safe_order_round_trip.py`](./safe_order_round_trip.py) | Place a 1 cent LIMIT BUY that never fills, confirm it appears in history, cancel it. Cleans up in a `finally` block. |
 
-### WebSocket streaming — markets channel
+### WebSocket streaming: markets channel
 
-The broadcast `markets` channel supports server-side filtering on `fields`, `rule_filters`, and `message_types`, plus dynamic re-selection after join. Each script is a 30-second listener focused on one capability.
+The broadcast `markets` channel supports server-side filtering on `fields`, `rule_filters` and `message_types`, plus dynamic re-selection after joining. Each script listens for about 30 seconds and focuses on one capability.
 
-| Script | Scenario |
+| Script | What it shows |
 |---|---|
-| [`ws_markets_basic.py`](./ws_markets_basic.py) | Default join — every field, every rule, both message types. |
-| [`ws_markets_bids_offers.py`](./ws_markets_bids_offers.py) | Narrow `fields` to `["bids", "offers"]` for liquidity-only feeds. |
-| [`ws_markets_rule_filters.py`](./ws_markets_rule_filters.py) | Server-side filter to specific market rule types (e.g. `spread`, `home_winner`). |
-| [`ws_markets_message_types.py`](./ws_markets_message_types.py) | Receive only `market_updated` events; skip `market_created`. |
-| [`ws_markets_dynamic.py`](./ws_markets_dynamic.py) | Change filters mid-stream via `ws.push(...)` — `select_fields`, `select_rule_filters`. |
-| [`ws_markets_order_book.py`](./ws_markets_order_book.py) | Pin to one market_id and render its top-of-book. Auto-discovers an OPEN market if `STX_MARKET_ID` is unset. |
+| [`ws_markets_basic.py`](./ws_markets_basic.py) | Default join: every field, every rule, both message types. |
+| [`ws_markets_bids_offers.py`](./ws_markets_bids_offers.py) | Narrow `fields` to `["bids", "offers"]` for a liquidity-only feed. |
+| [`ws_markets_rule_filters.py`](./ws_markets_rule_filters.py) | Server-side filter to specific market rule types (for example `spread`, `home_winner`). |
+| [`ws_markets_message_types.py`](./ws_markets_message_types.py) | Receive only `market_updated` events and skip `market_created`. |
+| [`ws_markets_dynamic.py`](./ws_markets_dynamic.py) | Change filters mid-stream with `ws.push(...)`: `select_fields`, `select_rule_filters`. |
+| [`ws_markets_order_book.py`](./ws_markets_order_book.py) | Pin to one market and render its top of book. Discovers an OPEN market if `STX_MARKET_ID` is unset. |
 | [`ws_markets_multi_order_book.py`](./ws_markets_multi_order_book.py) | Maintain a dict of order books for every market matching a rule filter. |
 
-### WebSocket streaming — user streams
+### WebSocket streaming: your account
 
-| Script | Scenario |
+| Script | What it shows |
 |---|---|
-| [`ws_personal_stream.py`](./ws_personal_stream.py) | Subscribe to per-user `PORTFOLIO` + `ORDERS` (auto-scoped to your uid). |
+| [`ws_personal_stream.py`](./ws_personal_stream.py) | Subscribe to the per-user `PORTFOLIO` and `ORDERS` channels (scoped to your account automatically). |
 
 ### Async patterns
 
-| Script | Scenario |
+| Script | What it shows |
 |---|---|
-| [`async_parallel_pulls.py`](./async_parallel_pulls.py) | `AsyncSTX` + `asyncio.gather` over independent ops — shows the speedup vs serial. |
-| [`async_with_ws.py`](./async_with_ws.py) | Event-driven bot pattern: WebSocket pushes events, `AsyncSTX` reacts via HTTP. |
+| [`async_parallel_pulls.py`](./async_parallel_pulls.py) | `AsyncSTX` with `asyncio.gather` over independent calls, timing serial against parallel. |
+| [`async_with_ws.py`](./async_with_ws.py) | Event-driven bot pattern: the WebSocket pushes events, `AsyncSTX` reacts over HTTP. |
+
+All scripts build their client through [`demo_config.py`](./demo_config.py), which reads the configuration below, loads `.env`, and checks for credentials. Copy it alongside any script you take out of this repo.
 
 ## Configuration
 
@@ -76,29 +94,32 @@ The broadcast `markets` channel supports server-side filtering on `fields`, `rul
 |---|---|
 | `STX_EMAIL` | Your STX account email. |
 | `STX_PASSWORD` | Your STX account password. |
-| `STX_REGION` | `ontario` or `us` — overrides the per-script default. |
-| `STX_ENV` | `production` / `staging` / `demo` / `dev` / `qa` — overrides the per-script default. |
+| `STX_REGION` | `us` or `ontario`. Default: `us`. |
+| `STX_ENV` | `demo` or `production`. Default: `demo`. |
+| `STX_HOST` | Optional. A hostname that overrides `STX_REGION` and `STX_ENV` entirely. |
+| `STX_MARKET_ID` | Optional. Pins `ws_markets_order_book.py` to one market. |
 
-`STX_HOST` overrides region/env entirely if you need to point at a custom host.
+The SDK reads these variables itself, with explicit constructor arguments taking precedence over the environment and the environment over a profile in `~/.stx/credentials`. The scripts pass no hardcoded region or environment, so the variables are honoured. Accounts do not carry across exchanges: an account registered on the US demo does not log in to the Ontario one.
+
+The demo environments use no real money. `production` is live money; point a script there only after you have read what it does.
 
 ## Continuous integration
 
-GitHub Actions runs every example end-to-end against Ontario staging on every push to `main` — see [`.github/workflows/smoke.yml`](./.github/workflows/smoke.yml). Failures mean either the SDK or the API contract drifted.
+Two workflows run on every pull request:
 
-Credentials used by CI live as repository secrets; no real credentials ever hit the repo.
+- [`lint.yml`](./.github/workflows/lint.yml) runs `ruff` and byte-compiles every script. It needs no credentials.
+- [`smoke.yml`](./.github/workflows/smoke.yml) runs every example end to end against a live environment using repository secrets. A failure there means the SDK or the API contract drifted.
 
-## Contributing a recipe
+No credentials are stored in the repo.
 
-1. Write a self-contained script at the repo root.
-2. Read credentials from env vars — never hardcode.
-3. Add a row to the table above describing the scenario.
-4. Extend [`.github/workflows/smoke.yml`](./.github/workflows/smoke.yml) to run it in CI.
+## Contributing
+
+Bug reports and small improvements are welcome via pull request; see [CONTRIBUTING.md](./CONTRIBUTING.md). To add a script: write it at the repo root, build the client through `demo_config`, add a row to the table above, and add a step to `smoke.yml`.
+
+## Docs
+
+Full SDK documentation: [docs.stxapp.io/sdks/python](https://docs.stxapp.io/sdks/python/). Start with the quickstart, then the authentication, trading and WebSocket guides.
 
 ## License
 
 MIT. See [LICENSE](./LICENSE).
-
-## Related
-
-- Developer docs: the official docs site for quickstart, authentication, trading, and WebSocket guides.
-- Issues: report bugs or request examples via the [Issues](https://github.com/stxapp/stx-python-demo/issues) tab.

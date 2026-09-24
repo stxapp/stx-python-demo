@@ -2,7 +2,7 @@ blank_issues_enabled: false
 contact_links:
   - name: STX Python SDK documentation
     url: https://docs.stxapp.io/sdks/python/quickstart
-    about: Start here if you're new to the SDK — quickstart, authentication, trading, WebSockets.
-  - name: stx-python on PyPI
-    url: https://pypi.org/project/stx-python/
-    about: Published SDK package. Version + release history lives here.
+    about: Start here if you're new to the SDK: quickstart, authentication, trading, WebSockets.
+  - name: STX Python SDK reference
+    url: https://docs.stxapp.io/sdks/python/
+    about: Install instructions, release notes and the full API reference for the stx-python package.

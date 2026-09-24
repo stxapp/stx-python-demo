@@ -14,10 +14,10 @@ Closes #
 
 How did you verify this works?
 
-- [ ] `python3 <example>.py` runs end-to-end against staging with no tracebacks
-- [ ] `python3 -m py_compile *.py` clean
+- [ ] `python3 <example>.py` runs end to end against the demo environment with no tracebacks
+- [ ] `ruff check .` and `python3 -m py_compile *.py` clean
 - [ ] Other:
 
 ## Notes for the reviewer
 
-Anything that isn't obvious from the diff — design choices, follow-ups, known limitations.
+Anything that isn't obvious from the diff: design choices, follow-ups, known limitations.

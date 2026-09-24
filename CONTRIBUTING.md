@@ -1,42 +1,44 @@
 # Contributing
 
-Thanks for taking the time to improve this demo. These are reference examples for the [stx-python SDK](https://pypi.org/project/stx-python/); the goal is clear, minimal, *working* snippets that a newcomer can clone and run.
+Thanks for taking the time to improve this demo. These are reference examples for the STX Python SDK (`stx-python`, documented at [docs.stxapp.io/sdks/python](https://docs.stxapp.io/sdks/python/)). The goal is clear, minimal, working scripts that a newcomer can clone and run.
 
 ## Where to file things
 
-- **Bug report / example doesn't work** → open an [Issue](https://github.com/stxapp/stx-python-demo/issues/new/choose). The form walks you through the details that matter.
-- **New example request / improvement** → also an Issue, using the "Feature request / example request" template.
-- **Question about the SDK itself** (as opposed to these demos) → start with [the docs](https://docs.stxapp.io/sdks/python/quickstart). For bugs in the SDK (not this demo), file against the SDK package, not here.
+- **A script does not work**: open an [issue](https://github.com/stxapp/stx-python-demo/issues/new/choose). The bug form asks for the details that matter.
+- **A new example or an improvement**: also an issue, using the "Feature request / example request" template.
+- **A question about the SDK itself** (rather than these demos): start with [the docs](https://docs.stxapp.io/sdks/python/quickstart). Bugs in the SDK belong with the SDK, not here.
 
 ## Filing a good issue
 
 - One problem per issue.
-- Include the exact command you ran + the exact output you got. Copy-paste beats paraphrasing.
-- Mention your OS, `python3 --version`, and the `stx-python` version you're on (`pip show stx-python`).
-- If you already know the root cause, say so — but don't wait until you do to file.
+- Include the exact command you ran and the exact output you got. Copy and paste beats paraphrasing.
+- Mention your OS, `python3 --version`, and the `stx-python` version you are on (`pip show stx-python`).
+- If you already know the root cause, say so, but do not wait until you do to file.
 
 ## Pull requests
 
-Happy to take them. Before you start a large change, open an issue first so we can discuss scope.
+Happy to take them. Before you start a large change, open an issue first so we can agree on scope.
 
 Before opening a PR:
 
 ```bash
-# Make sure every .py file at least parses.
+# Lint and make sure every script parses. This is what CI runs.
+pip install ruff
+ruff check .
 python3 -m py_compile *.py
 
-# If your change affects an example, run it against staging once:
+# If your change affects an example, run it once against the demo environment:
 export STX_EMAIL=... STX_PASSWORD=...
 python3 quickstart.py   # or whichever file you changed
 ```
 
-Keep diffs small and focused. One concern per PR makes review cheap.
+Keep diffs small and focused. One concern per PR makes review cheap. Build the client through `demo_config.make_client()` (or `make_async_client()` / `make_ws()`) rather than constructing `STX(...)` directly, so the configuration story stays consistent across scripts.
 
-## What *not* to submit
+## What not to submit
 
-- Breaking changes to the shape of these examples without prior agreement (they're public reference; stability matters).
-- Examples that require unreleased or private SDK versions — everything here must work against the latest published `stx-python` on PyPI.
-- Credentials, tokens, or any real account data in example configs.
+- Breaking changes to the shape of these examples without prior agreement. They are public reference material and stability matters.
+- Examples that need unreleased or private SDK versions. Everything here must work against the latest published `stx-python`.
+- Credentials, tokens, or any real account data, in code or in example configs.
 
 ## Code of conduct
 

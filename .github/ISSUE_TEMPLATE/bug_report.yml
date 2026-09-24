@@ -23,8 +23,8 @@ body:
     id: env
     attributes:
       label: Environment
-      description: Which STX environment were you pointed at?
-      placeholder: staging
+      description: Which STX region and environment were you pointed at (STX_REGION / STX_ENV, or STX_HOST)?
+      placeholder: "us / demo"
     validations:
       required: true
 
@@ -50,7 +50,7 @@ body:
     attributes:
       label: stx-python version
       description: Output of `pip show stx-python | grep Version` (or `python -c "import stx; print(stx.__version__)"`).
-      placeholder: "0.1.0a2"
+      placeholder: "0.4.0a1"
     validations:
       required: true
 
