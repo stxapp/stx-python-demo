@@ -1,6 +1,6 @@
-"""Markets channel — narrow fields to bids and offers.
+"""Markets channel: narrow fields to bids and offers.
 
-Server-side filter via the join-payload ``fields`` list — only the
+Server-side filter via the join-payload ``fields`` list: only the
 liquidity-relevant keys come back, plus the always-on mandatory
 ``market_id`` / ``timestamp`` / ``unix_timestamp``.
 
@@ -17,9 +17,9 @@ import sys
 from collections import Counter
 from datetime import datetime
 
-from stx import STX, STXWebSocket
 from stx.enums import Channels
 
+from demo_config import make_client, make_ws
 
 LISTEN_WINDOW_SECONDS = 30
 
@@ -39,7 +39,7 @@ def _depth(side, label: str) -> str:
 
 
 async def stream() -> None:
-    with STX(region="ontario", env="staging") as client:
+    with make_client() as client:
         client.login()
 
     events: Counter = Counter()
@@ -62,7 +62,7 @@ async def stream() -> None:
             f"{_depth(p.get('bids'), 'bids')}  {_depth(p.get('offers'), 'offers')}"
         )
 
-    async with STXWebSocket(region="ontario", env="staging") as ws:
+    async with make_ws() as ws:
         await ws.join(
             Channels.MARKETS,
             on_message=on_msg,
@@ -81,7 +81,7 @@ async def stream() -> None:
     for event, count in sorted(events.items(), key=lambda x: -x[1]):
         print(f"  {event:<25} {count}")
     if not received:
-        print("  (no frames — env may be quiet outside ET market hours)")
+        print("  (no frames; the environment may be quiet when no events are in play)")
 
 
 def main() -> None:

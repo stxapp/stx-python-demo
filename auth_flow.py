@@ -1,9 +1,9 @@
-"""STX auth flow — the three branches every production caller handles.
+"""STX auth flow: the three branches every production caller handles.
 
-1. **Happy path** — email/password login, no 2FA enabled on the account.
-2. **2FA branch** — server emailed/SMS'd a one-time code; submit it via
+1. **Happy path**: email/password login, no 2FA enabled on the account.
+2. **2FA branch**: server emailed/SMS'd a one-time code; submit it via
    ``confirm_2fa``. Required for accounts that have 2FA on.
-3. **Token refresh** — STX access tokens expire after 60 minutes. The
+3. **Token refresh**: STX access tokens expire after 60 minutes. The
    SDK handles this transparently: every authenticated call goes
    through an auth wrapper that checks expiry and, if needed, exchanges
    the cached refresh token for a fresh access token before the request
@@ -17,13 +17,15 @@ Run:
 """
 import sys
 
-from stx import STX, Selection
+from stx import Selection
 from stx.exceptions import STXAuthException, STXTwoFactorRequiredException
 from stx.user import User
 
+from demo_config import make_client
+
 
 def main() -> None:
-    client = STX(region="ontario", env="staging")
+    client = make_client()
 
     # ---- 1. Login (happy path) + 2. 2FA branch -----------------------
     try:
@@ -37,7 +39,7 @@ def main() -> None:
             code = input("Enter 2FA code: ").strip()
         except EOFError:
             print(
-                "stdin closed — re-run with a 2FA-disabled account, or "
+                "stdin closed. Re-run with a 2FA-disabled account, or "
                 "run this script interactively to enter the code.",
                 file=sys.stderr,
             )
@@ -53,14 +55,14 @@ def main() -> None:
     print(f"  access expires:     {user.expiry}  (≈59 min from now)")
     print(f"  refresh_token set:  {bool(user.refresh_token)}")
 
-    # ---- 3. Token refresh — happens automatically --------------------
+    # ---- 3. Token refresh: happens automatically --------------------
     # No code required. Fire a couple of authenticated calls; the auth
     # wrapper transparently exchanges the refresh token for a fresh
     # access token whenever the cached one is past expiry. The user
     # of this SDK never writes refresh logic.
     acct = client.account(selections=Selection("available_balance", "loyalty_tier"))
     print(f"  balance:            ${acct.available_balance or 0:.2f}")
-    print(f"  tier:               {acct.loyalty_tier or '—'}")
+    print(f"  tier:               {acct.loyalty_tier or '-'}")
 
     page = client.markets(
         limit=3,

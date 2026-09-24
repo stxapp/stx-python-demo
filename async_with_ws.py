@@ -1,9 +1,9 @@
-"""Event-driven bot pattern — ``AsyncSTX`` + ``STXWebSocket`` together.
+"""Event-driven bot pattern: ``AsyncSTX`` + ``STXWebSocket`` together.
 
 Wires up the canonical pair: a WebSocket pushing live market frames,
 an async HTTP client ready to react. When a market update arrives, we
 look up the market's full state via HTTP. That's the shape most
-trading bots use — WS for low-latency events, HTTP for queries and
+trading bots use: WS for low-latency events, HTTP for queries and
 order placement.
 
 Both clients share the same ``User`` singleton, so a single login
@@ -17,16 +17,17 @@ Run:
 import asyncio
 import sys
 
-from stx import AsyncSTX, STXWebSocket, Selection
+from stx import Selection
 from stx.enums import Channels
 
+from demo_config import make_async_client, make_ws
 
 LISTEN_WINDOW_SECONDS = 30
 LOOKUP_AT_MOST = 3   # Cap the HTTP fan-out so the demo stays bounded.
 
 
 async def main() -> None:
-    async with AsyncSTX(region="ontario", env="staging") as client:
+    async with make_async_client() as client:
         await client.login()
 
         seen_market_ids: set[str] = set()
@@ -54,11 +55,11 @@ async def main() -> None:
                     f"{m.title!r} px={m.price} prob={m.probability}"
                 )
 
-        async with STXWebSocket(region="ontario", env="staging") as ws:
+        async with make_ws() as ws:
             await ws.join(Channels.MARKETS, on_message=on_market)
             print(
                 f"Subscribed. Looking up the first {LOOKUP_AT_MOST} unique "
-                f"markets that publish, or for {LISTEN_WINDOW_SECONDS}s — "
+                f"markets that publish, or for {LISTEN_WINDOW_SECONDS}s, "
                 "whichever comes first."
             )
             try:
@@ -71,8 +72,8 @@ async def main() -> None:
         )
         if lookup_count == 0:
             print(
-                "  (no frames carried a market_id we could look up — dev "
-                "may be quiet outside ET market hours.)"
+                "  (no frames carried a market_id we could look up; the "
+                "environment may be quiet when no events are in play.)"
             )
 
 

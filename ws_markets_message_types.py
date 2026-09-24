@@ -1,4 +1,4 @@
-"""Markets channel — receive only ``market_updated`` events.
+"""Markets channel: receive only ``market_updated`` events.
 
 Asks the server to skip ``market_created`` broadcasts so you only get
 ticks for already-listed markets. Useful for steady-state monitoring
@@ -14,9 +14,9 @@ import sys
 from collections import Counter
 from datetime import datetime
 
-from stx import STX, STXWebSocket
 from stx.enums import Channels
 
+from demo_config import make_client, make_ws
 
 LISTEN_WINDOW_SECONDS = 30
 
@@ -26,7 +26,7 @@ def _hms() -> str:
 
 
 async def stream() -> None:
-    with STX(region="ontario", env="staging") as client:
+    with make_client() as client:
         client.login()
 
     events: Counter = Counter()
@@ -49,7 +49,7 @@ async def stream() -> None:
             f"market_id={p.get('market_id')} title={p.get('title')!r}"
         )
 
-    async with STXWebSocket(region="ontario", env="staging") as ws:
+    async with make_ws() as ws:
         await ws.join(
             Channels.MARKETS,
             on_message=on_msg,
@@ -68,7 +68,7 @@ async def stream() -> None:
     for event, count in sorted(events.items(), key=lambda x: -x[1]):
         print(f"  {event:<25} {count}")
     if not received:
-        print("  (no frames — env may be quiet outside ET market hours)")
+        print("  (no frames; the environment may be quiet when no events are in play)")
 
 
 def main() -> None:

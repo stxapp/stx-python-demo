@@ -1,4 +1,4 @@
-"""Markets channel — multiple live order books.
+"""Markets channel: multiple live order books.
 
 Subscribes server-side to a category of markets via ``rule_filters``
 and maintains a dict of order books keyed by ``market_id``. After each
@@ -6,7 +6,7 @@ update, prints the current top-of-book for every market we've seen so
 far.
 
 This is the efficient pattern when you want N order books that share a
-rule type — the server only sends frames for matching markets, and the
+rule type: the server only sends frames for matching markets, and the
 client just routes by id.
 
 If you instead want a fixed list of specific market_ids across rule
@@ -24,9 +24,9 @@ from collections import Counter
 from datetime import datetime
 from typing import Dict, List
 
-from stx import STX, STXWebSocket
 from stx.enums import Channels
 
+from demo_config import make_client, make_ws
 
 LISTEN_WINDOW_SECONDS = 30
 RULE_FILTERS: List[str] = ["spread", "home_winner"]
@@ -66,7 +66,7 @@ def _render_books() -> None:
 
 
 async def stream() -> None:
-    with STX(region="ontario", env="staging") as client:
+    with make_client() as client:
         client.login()
 
     events: Counter = Counter()
@@ -89,7 +89,7 @@ async def stream() -> None:
         books[mid] = {"bids": p.get("bids"), "offers": p.get("offers")}
         _render_books()
 
-    async with STXWebSocket(region="ontario", env="staging") as ws:
+    async with make_ws() as ws:
         await ws.join(
             Channels.MARKETS,
             on_message=on_msg,
@@ -113,7 +113,7 @@ async def stream() -> None:
     )
     if not books:
         print(
-            "  (no books — env may be quiet, or no markets match the rule filters)"
+            "  (no books; the environment may be quiet, or no markets match the rule filters)"
         )
 
 

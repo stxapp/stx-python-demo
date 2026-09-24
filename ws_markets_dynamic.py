@@ -1,13 +1,13 @@
-"""Markets channel — change filters mid-stream.
+"""Markets channel: change filters mid-stream.
 
 Joins with one filter, then mid-stream uses ``ws.push(...)`` to swap
-the field selection and disable rule filtering — without re-joining.
+the field selection and disable rule filtering, without re-joining.
 
 Three dynamic events are supported post-join:
 
-- ``select_fields`` — replace the field list
-- ``select_rule_filters`` — replace the rule filter list (``null`` to disable)
-- ``select_message_types`` — replace the message-type list
+- ``select_fields``: replace the field list
+- ``select_rule_filters``: replace the rule filter list (``null`` to disable)
+- ``select_message_types``: replace the message-type list
 
 Each one is fire-and-forget; the server replies with the new effective
 config on the same channel.
@@ -22,9 +22,9 @@ import sys
 from collections import Counter
 from datetime import datetime
 
-from stx import STX, STXWebSocket
 from stx.enums import Channels
 
+from demo_config import make_client, make_ws
 
 LISTEN_WINDOW_SECONDS = 25
 SWAP_AT_SECONDS = 10
@@ -35,7 +35,7 @@ def _hms() -> str:
 
 
 async def stream() -> None:
-    with STX(region="ontario", env="staging") as client:
+    with make_client() as client:
         client.login()
 
     events: Counter = Counter()
@@ -63,7 +63,7 @@ async def stream() -> None:
             f"market_id={p.get('market_id')} fields_present={keys}"
         )
 
-    async with STXWebSocket(region="ontario", env="staging") as ws:
+    async with make_ws() as ws:
         await ws.join(
             Channels.MARKETS,
             on_message=on_msg,
@@ -86,7 +86,7 @@ async def stream() -> None:
                 {"fields": ["title", "price", "recent_trades"]},
             )
             await asyncio.sleep(2)
-            print(f"  [{_hms()}] >>> push select_rule_filters(null) — disable filtering\n")
+            print(f"  [{_hms()}] >>> push select_rule_filters(null) to disable filtering\n")
             await ws.push(
                 Channels.MARKETS, "select_rule_filters", {"rule_filters": None}
             )

@@ -1,4 +1,4 @@
-"""STX SDK Hello World — log in and pull a few open markets in 5 lines.
+"""STX SDK Hello World: log in and pull a few open markets in 5 lines.
 
 Run:
     export STX_EMAIL="you@example.com"
@@ -9,13 +9,15 @@ The smallest possible working example. For the production-grade login
 flow (2FA, refresh, error branches) see ``auth_flow.py``. For all the
 ways to shape the response, see ``list_markets.py``.
 
-Compatible with stx-python >= 0.3.0a3.
+Requires stx-python 0.4.0a1 or newer (see requirements.txt).
 """
-from stx import STX, Selection
+from stx import Selection
+
+from demo_config import make_client
 
 
 def main() -> None:
-    with STX(region="ontario", env="staging") as client:
+    with make_client() as client:
         client.login()
 
         page = client.markets(

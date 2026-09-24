@@ -1,12 +1,12 @@
-"""Markets channel — server-side rule filtering.
+"""Markets channel: server-side rule filtering.
 
 Asks the server to only push updates for markets whose rule type is in
-``RULE_FILTERS``. The join-reply echoes ``available_rules`` — the full
-list of rule names valid on the env you're connected to — which makes
+``RULE_FILTERS``. The join-reply echoes ``available_rules``, the full
+list of rule names valid on the environment you're connected to, which makes
 this a useful discovery script too.
 
 Pass ``"rule_filters": null`` (or an empty list) at join time to
-disable filtering, or do it dynamically with ``ws.push(...)`` — see
+disable filtering, or do it dynamically with ``ws.push(...)``; see
 ``ws_markets_dynamic.py``.
 
 Run:
@@ -19,9 +19,9 @@ import sys
 from collections import Counter
 from datetime import datetime
 
-from stx import STX, STXWebSocket
 from stx.enums import Channels
 
+from demo_config import make_client, make_ws
 
 LISTEN_WINDOW_SECONDS = 30
 RULE_FILTERS = ["spread", "home_winner"]
@@ -32,7 +32,7 @@ def _hms() -> str:
 
 
 async def stream() -> None:
-    with STX(region="ontario", env="staging") as client:
+    with make_client() as client:
         client.login()
 
     events: Counter = Counter()
@@ -58,7 +58,7 @@ async def stream() -> None:
             f"market_id={p.get('market_id')} rules={rules}"
         )
 
-    async with STXWebSocket(region="ontario", env="staging") as ws:
+    async with make_ws() as ws:
         await ws.join(
             Channels.MARKETS,
             on_message=on_msg,
@@ -82,7 +82,7 @@ async def stream() -> None:
             print(f"  {rule:<20} {count}")
     if not received:
         print(
-            "  (no frames — env may be quiet, or no markets match the rule filters)"
+            "  (no frames; the environment may be quiet, or no markets match the rule filters)"
         )
 
 

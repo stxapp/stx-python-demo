@@ -1,7 +1,7 @@
 """Parallelise unrelated reads with ``AsyncSTX`` + ``asyncio.gather``.
 
-If you need data from several independent ops at once — say, building
-a dashboard view that wants markets, account, and order history — fire
+If you need data from several independent ops at once (say, building
+a dashboard view that wants markets, account, and order history), fire
 them in parallel instead of serialising. ``AsyncSTX`` shares one
 ``aiohttp`` session, so the cost per extra request is just the round
 trip, not a new connection.
@@ -14,34 +14,36 @@ Run:
 import asyncio
 import time
 
-from stx import AsyncSTX, Selection
+from stx import Selection
+
+from demo_config import make_async_client
 
 
 async def main() -> None:
-    async with AsyncSTX(region="ontario", env="staging") as client:
+    async with make_async_client() as client:
         await client.login()
 
-        # Serial baseline — three independent ops, one after another.
+        # Serial baseline: three independent ops, one after another.
         t0 = time.perf_counter()
-        m1 = await client.markets(
+        await client.markets(
             sports=["Soccer"], limit=25,
             selections=Selection("market_id", "title"),
         )
-        m2 = await client.markets(
+        await client.markets(
             sports=["Basketball"], limit=25,
             selections=Selection("market_id", "title"),
         )
-        acct = await client.account(
+        await client.account(
             selections=Selection("available_balance", "loyalty_tier")
         )
         serial = time.perf_counter() - t0
 
-        # Parallel — same three ops scheduled concurrently. The session
+        # Parallel: same three ops scheduled concurrently. The session
         # multiplexes them over the kept-alive aiohttp connection.
         #
-        # `return_exceptions=True` so a single failure on staging (token
+        # `return_exceptions=True` so a single failure (token
         # races during concurrent auth checks, transient 5xx, etc.)
-        # doesn't take the whole demo down — we report what came back
+        # doesn't take the whole demo down; we report what came back
         # and what failed instead.
         t0 = time.perf_counter()
         results = await asyncio.gather(

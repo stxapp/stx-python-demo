@@ -1,4 +1,4 @@
-"""Markets channel — single-market live order book.
+"""Markets channel: single-market live order book.
 
 Pins to one ``market_id`` and renders its top-of-book bids / offers as
 they update. The ``markets`` channel has no native ``market_id`` filter
@@ -6,13 +6,13 @@ they update. The ``markets`` channel has no native ``market_id`` filter
 server-side to the bids/offers fields and filter client-side for the
 target market.
 
-Set ``MARKET_ID`` in the env to pin a specific market, or leave it
+Set ``STX_MARKET_ID`` in the environment to pin a specific market, or leave it
 unset and the script auto-discovers an OPEN market via the HTTP API.
 
 Run:
     export STX_EMAIL="you@example.com"
     export STX_PASSWORD="..."
-    # Optional — pin a specific market
+    # Optional: pin a specific market
     # export STX_MARKET_ID="..."
     python ws_markets_order_book.py
 """
@@ -22,9 +22,10 @@ import sys
 from collections import Counter
 from datetime import datetime
 
-from stx import STX, STXWebSocket, Selection
+from stx import STX, Selection
 from stx.enums import Channels
 
+from demo_config import make_client, make_ws
 
 LISTEN_WINDOW_SECONDS = 30
 DEPTH = 5
@@ -58,8 +59,8 @@ def _resolve_market_id(client: STX) -> str:
     )
     if not len(page):
         raise SystemExit(
-            "No OPEN markets on this env — set STX_MARKET_ID or run during "
-            "trading hours."
+            "No OPEN markets on this environment. Set STX_MARKET_ID, or try "
+            "again when events are in play."
         )
     m = next(iter(page))
     print(f"Auto-discovered market_id={m.market_id} ({m.title!r})")
@@ -67,7 +68,7 @@ def _resolve_market_id(client: STX) -> str:
 
 
 async def stream() -> None:
-    client = STX(region="ontario", env="staging")
+    client = make_client()
     client.login()
     target = _resolve_market_id(client)
 
@@ -88,7 +89,7 @@ async def stream() -> None:
         print(_ladder(p.get("bids"), "bids"))
         print(_ladder(p.get("offers"), "offers"))
 
-    async with STXWebSocket(region="ontario", env="staging") as ws:
+    async with make_ws() as ws:
         await ws.join(
             Channels.MARKETS,
             on_message=on_msg,
@@ -108,8 +109,8 @@ async def stream() -> None:
         f"in {LISTEN_WINDOW_SECONDS}s; {matched} matched the target market."
     )
     if matched == 0:
-        print("  (no ticks for this market — try a different STX_MARKET_ID, "
-              "or run during trading hours)")
+        print("  (no ticks for this market; try a different STX_MARKET_ID, "
+              "or try again when events are in play)")
 
 
 def main() -> None:
