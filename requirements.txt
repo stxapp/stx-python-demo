@@ -2,16 +2,9 @@
 #
 #     pip install -r requirements.txt
 #
-# stx-python is in pre-release on TestPyPI until its first PyPI release.
-# The two index lines below point pip at TestPyPI for the SDK while still
-# resolving its dependencies (gql, graphql-core, aiohttp, ...) from PyPI.
-# The version specifier allows pre-release matches for this one package
-# only; the global `--pre` flag is deliberately avoided because it would
-# also pull pre-release versions of the transitive dependencies.
-#
-# Once stx-python is on PyPI this file collapses to a single line:
-#     stx-python
---index-url https://test.pypi.org/simple/
---extra-index-url https://pypi.org/simple/
-
-stx-python>=0.4.0a1
+# API-key authentication and client.me() arrive with stx-python 0.6.0,
+# the SDK's first release on PyPI. Until it is published there is nothing
+# for pip to resolve this line against, so install the SDK from a built
+# wheel first (see the README's Install section). After that, pip sees
+# the requirement as satisfied and this file adds nothing else.
+stx-python>=0.6.0
