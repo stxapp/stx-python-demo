@@ -1,84 +1,44 @@
-"""List the most-active OPEN markets: the kind of view a trader opens
-to find something to bet on.
+"""List the most active open markets: the view you open to find something to trade.
 
-Sorts by 24-hour volume and prints a clean table:
-
-    SPORT       TITLE                                 STATUS  PRICE  PROB    24h VOL
-    ───────────────────────────────────────────────────────────────────────────────
-    Soccer      Chelsea vs Arsenal                    OPEN    0.62   62%    $1,243,820
-    ...
+Pulls open, trading markets page by page, sorts by 24-hour volume and
+prints a table. Prices and volumes are printed exactly as the API sends
+them (dollar strings, contract counts as quantity strings); ``Decimal``
+does the sorting so no float ever touches a money value.
 
 Run:
     export STX_KEY_ID="your-key-id"
     export STX_PRIVATE_KEY="$HOME/.stx/us-demo.pem"
     python list_markets.py
-
-Note on field shaping: ``client.markets()`` returns a ``Page[MarketInfo]``;
-passing a flat ``Selection(...)`` narrows the per-market response so
-you only pay for the fields you need on the wire. For 100-market lists
-the narrow form is 10 to 30x smaller than the default schema walk, which matters
-once you scale.
 """
-from __future__ import annotations  # PEP 604 union syntax in helpers (3.9 compat)
 
-from stx import Selection
+from decimal import Decimal
+from itertools import islice
 
 from demo_config import make_client
 
 TOP_N = 20
+SCAN = 400  # markets to look at; iter_markets follows the cursor for us
 
 
-def _fmt_price(p: float | None) -> str:
-    return f"{p:.2f}" if p is not None else "  -"
-
-
-def _fmt_prob(p: float | None) -> str:
-    return f"{p * 100:>3.0f}%" if p is not None else "  -"
-
-
-def _fmt_volume(v: int | None) -> str:
-    if v is None:
-        return "        -"
-    if v >= 1_000_000:
-        return f"${v / 1_000_000:>5.1f}M"
-    if v >= 1_000:
-        return f"${v / 1_000:>5.1f}K"
-    return f"${v:>6.0f}"
+def _volume(market) -> Decimal:
+    return Decimal(market.volume24h) if market.volume24h else Decimal(0)
 
 
 def main() -> None:
     with make_client() as client:
-        # Fetch a healthy slice: server-side filters narrow to currently-
-        # tradable markets; client-side sort by volume picks the top N.
-        page = client.markets(
-            status=["OPEN"],
-            trading="TRUE",
-            limit=200,
-            selections=Selection(
-                "market_id", "sport", "title", "status", "price",
-                "probability", "volume24h",
-            ),
-        )
+        markets = list(islice(client.iter_markets(status="open", trading=True, limit=200), SCAN))
+        active = sorted(markets, key=_volume, reverse=True)[:TOP_N]
+        print(f"Top {len(active)} markets by 24h volume (of {len(markets)} scanned)\n")
 
-        # Page acts like a list: sort and slice as usual. Markets that have
-        # not traded in the last day carry no volume and sort to the end,
-        # so a quiet environment still shows something to look at.
-        active = sorted(page, key=lambda m: m.volume24h or 0, reverse=True)[:TOP_N]
-
-        print(f"Top {len(active)} active markets (of {page.count} open / tradable)\n")
-        header = (
-            f"  {'SPORT':<12} {'TITLE':<40} {'STATUS':<8} "
-            f"{'PRICE':<6} {'PROB':<5}  {'24h VOL':>9}"
-        )
+        header = f"  {'SPORT':<12} {'TITLE':<44} {'BID':>7} {'OFFER':>7} {'LAST':>7} {'24h VOL':>9}"
         print(header)
-        print("  " + "─" * (len(header) - 2))
+        print("  " + "-" * (len(header) - 2))
         for m in active:
-            sport = (m.sport or "-")[:12]
-            title = (m.title or "-")[:40]
+            bid = m.bids[0].price if m.bids else "-"
+            offer = m.offers[0].price if m.offers else "-"
             print(
-                f"  {sport:<12} {title:<40} "
-                f"{m.status or '-':<8} {_fmt_price(m.price):<6} "
-                f"{_fmt_prob(m.probability):<5} {_fmt_volume(m.volume24h):>9}"
+                f"  {(m.sport or '-')[:12]:<12} {(m.title or '-')[:44]:<44} "
+                f"{bid:>7} {offer:>7} {m.last_traded_price or '-':>7} {m.volume24h or '-':>9}"
             )
 
 

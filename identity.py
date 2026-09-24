@@ -5,10 +5,9 @@ Each request is signed individually, so the first useful thing to do at
 startup is ask the exchange who you are:
 
 - ``user_id`` / ``account_id`` identify the account behind the key. The
-  user id is what the per-user WebSocket channels (orders, trades,
-  portfolio, settlements) are keyed on; calling ``me()`` once seeds it
-  for every client in the process, so do this before joining any of
-  those channels.
+  user id is what the account WebSocket channels (orders, fills,
+  positions, settlements, balances, account, user_info) are keyed on;
+  the SDK fetches it for you when you join one.
 - ``scope`` is ``read_only`` or ``read_write``. Placing or cancelling
   orders needs ``read_write``; check it up front rather than discovering
   it from a rejected order.
@@ -19,11 +18,10 @@ Run:
     export STX_PRIVATE_KEY="$HOME/.stx/us-demo.pem"
     python identity.py
 """
+
 import sys
 
-from stx import Selection
-from stx.exceptions import STXAuthException, STXConfigException
-from stx.models import AccessScope
+from stx import STXAuthenticationException, STXConfigException
 
 from demo_config import describe_target, make_client
 
@@ -32,40 +30,37 @@ def main() -> None:
     try:
         client = make_client()
     except STXConfigException as exc:
-        # Key id without key material, a PEM that is not Ed25519, and
+        # A key id without key material, a PEM that is not Ed25519, and
         # similar problems are caught at construction time, before any
         # request is made.
         print(f"Configuration problem: {exc}", file=sys.stderr)
-        raise SystemExit(1)
+        raise SystemExit(1) from None
 
     with client:
         try:
             me = client.me()
-        except STXAuthException as exc:
+        except STXAuthenticationException as exc:
             # The signature was rejected: wrong key id, a revoked key,
             # or a host clock more than 30 seconds off.
             print(f"Authentication failed: {exc}", file=sys.stderr)
-            raise SystemExit(1)
+            raise SystemExit(1) from None
 
-        print(f"Connected to {describe_target()}")
+        print(f"Connected to {describe_target()} ({client.base_url})")
         print(f"  user_id:     {me.user_id}")
         print(f"  account_id:  {me.account_id}")
         print(f"  name:        {(me.first_name or '')} {(me.last_name or '')}".rstrip())
-        print(f"  method:      {me.method.value if me.method else '-'}")
-        print(f"  scope:       {me.scope.value if me.scope else '-'}")
+        print(f"  method:      {me.method or '-'}")
+        print(f"  scope:       {me.scope or '-'}")
         print(f"  key_id:      {me.key_id or '-'}")
 
-        can_trade = me.scope == AccessScope.READ_WRITE
         print(
             "\nThis key can place and cancel orders."
-            if can_trade
+            if me.scope == "read_write"
             else "\nThis key is read-only: market data and history work, trading is rejected."
         )
 
-        # One authenticated read to show the key in use. Nothing else to
-        # do for auth: the SDK signs this request the same way it did me().
-        page = client.markets(limit=3, selections=Selection("market_id", "title"))
-        print(f"  markets reachable: {len(page)} of {page.count}")
+        page = client.markets(limit=3)
+        print(f"  markets reachable: {len(page)} on the first page")
 
 
 if __name__ == "__main__":

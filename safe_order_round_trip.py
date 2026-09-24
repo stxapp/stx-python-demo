@@ -1,142 +1,87 @@
-"""Place a resting LIMIT BUY at 1¢, verify, cancel. The safest possible
-trading round-trip.
+"""Place a resting 1-cent limit buy, verify it, cancel it: the safest trading round trip.
 
-What this proves:
+What this shows:
 
 - ``me()`` reports the key's scope; only a ``read_write`` key may trade.
-- ``place_order`` mutation works against your account (and shows you
-  what error you'd see if it doesn't: geo-block, no trading rights
-  and similar are surfaced as ``STXException`` with a clear message).
-- ``cancel_order`` removes the resting order.
-- The ``orders`` history reflects both the place and the cancel.
+- ``place_order`` takes price and quantity as strings, the way
+  ``POST /api/v1/orders`` does: ``price="0.01", quantity="1"``.
+- The order is visible through ``orders(client_order_ids=[...])`` and
+  ``order(id)``.
+- ``cancel_order`` removes it, and a ``finally`` block cancels anything
+  left on the account even if the script fails part way.
 
-Why it's safe to run end-to-end:
-
-- LIMIT BUY at price=1 (one cent, the lowest non-zero price) **never crosses
-  the spread on any real market**, so it sits resting until cancelled.
-  No fills, no real money committed.
-- Quantity is 1, the smallest tradable size.
-- A try/finally cancel-all sweeps any leakage, even if the script
-  raises mid-flow.
+Why it is safe: a buy at $0.01 does not cross the spread on a real
+market, so it rests until cancelled; the quantity is one contract; and
+the default target is the demo exchange, which uses no real money.
 
 Run:
     export STX_KEY_ID="your-key-id"
     export STX_PRIVATE_KEY="$HOME/.stx/us-demo.pem"
     python safe_order_round_trip.py
 """
-from __future__ import annotations  # `str | None` in helper signatures (3.9 compat)
 
 import sys
+import uuid
 
-from stx import Selection
-from stx.exceptions import STXException
-from stx.models import AccessScope
+from stx import STXAPIException
 
-from demo_config import make_client
+from demo_config import find_tradeable_market, make_client
 
-RESTING_BUY_PRICE = 1   # 1 cent; never fills against real liquidity
-RESTING_BUY_QTY = 1
-
-
-def _find_tradable_market(client) -> str | None:
-    """Pick any OPEN + currently-tradable market. Returns market_id, or
-    None if the env has nothing to trade right now."""
-    page = client.markets(
-        status=["OPEN"],
-        trading="TRUE",
-        limit=5,
-        selections=Selection("market_id", "title"),
-    )
-    return page[0].market_id if len(page) else None
+PRICE = "0.01"
+QUANTITY = "1"
 
 
 def main() -> None:
     with make_client() as client:
-        # An API key is issued as read_only or read_write; only the latter
-        # may place or cancel orders. Check up front instead of discovering
-        # it from a rejected place_order.
         me = client.me()
-        if me.scope != AccessScope.READ_WRITE:
+        if me.scope != "read_write":
             print(
-                f"This key has scope {me.scope.value if me.scope else 'unknown'}; "
-                "placing orders needs READ_WRITE. Create a read_write key to run "
-                "this example.",
-                file=sys.stderr,
+                f"This key has scope {me.scope}; placing orders needs read_write.", file=sys.stderr
             )
             raise SystemExit(0)
 
-        market_id = _find_tradable_market(client)
-        if market_id is None:
-            print(
-                "No OPEN + tradable markets right now. Sports markets trade "
-                "around their events rather than fixed exchange hours; try "
-                "again when events are in play.",
-                file=sys.stderr,
-            )
+        market = find_tradeable_market(client)
+        if market is None:
+            print("No open, trading market with an unstarted event right now.", file=sys.stderr)
             raise SystemExit(0)
+        print(f"Market: {market.symbol} (max price {market.max_price})")
 
-        # Cancel any leftovers from a previous run before we start.
+        client_order_id = f"demo-{uuid.uuid4()}"
         try:
-            client.cancel_all_orders()
-        except STXException:
-            pass
-
-        order_id = None
-        try:
-            print(f"Placing 1¢ LIMIT BUY x{RESTING_BUY_QTY} on {market_id}...")
+            print(f"Placing limit buy {QUANTITY} @ {PRICE}...")
             try:
-                result = client.place_order(
-                    market_id=market_id,
-                    order_type="LIMIT",
-                    action="BUY",
-                    price=RESTING_BUY_PRICE,
-                    quantity=RESTING_BUY_QTY,
-                    selections=Selection("errors", order=Selection("id", "status")),
+                order = client.place_order(
+                    market.market_id,
+                    "buy",
+                    "limit",
+                    price=PRICE,
+                    quantity=QUANTITY,
+                    client_order_id=client_order_id,
                 )
-            except STXException as exc:
-                msg = str(exc).lower()
-                if any(kw in msg for kw in ("forbidden", "permission", "geo", "not allowed")):
-                    print(f"This account can't trade on this environment right now: {exc}")
-                    raise SystemExit(0)
-                raise
-
-            if result.order is None:
-                print(f"place_order returned no order; errors={result.errors}", file=sys.stderr)
-                raise SystemExit(1)
-
-            order_id = result.order.id
-            print(f"  → placed: id={order_id} status={result.order.status}")
-
-            # Verify the order surfaces in the history.
-            orders = client.orders(
-                order_ids=[order_id],
-                pagination={"page": 0, "limit": 1},
-                selections=Selection("id", "status", "price", "quantity"),
+            except STXAPIException as exc:
+                # 403: read-only key or account state; 422: the exchange
+                # refused (closed market, funds). The message says which.
+                print(f"The exchange refused the order ({exc.status_code}): {exc}")
+                raise SystemExit(0) from None
+            print(
+                f"  placed: id={order.id} status={order.status} price={order.price} "
+                f"qty={order.quantity}"
             )
-            if len(orders) == 1:
-                print(f"  → visible in orders(): {orders[0].status}")
-            else:
-                print("  → orders() didn't return our row yet (eventual consistency)")
 
-            # Cancel it. Server may have already moved the order to a
-            # non-cancellable state by the time we get here (filled, expired,
-            # auto-cancelled, etc.); tolerate that; the finally block sweeps
-            # any survivors via cancel_all_orders.
-            try:
-                client.cancel_order(
-                    order_id=order_id,
-                    selections=Selection("status"),
-                )
-                print(f"  → cancelled {order_id}")
-            except Exception as exc:
-                print(f"  → cancel_order raised ({type(exc).__name__}); finally will sweep")
+            found = client.orders(client_order_ids=[client_order_id])
+            print(f"  visible in orders(): {[o.status for o in found]}")
+            print(f"  order(id): {client.order(order.id).status}")
+
+            cancelled = client.cancel_order(order.id)
+            print(f"  cancelled: {cancelled.order_id} -> {cancelled.status}")
+            print(
+                f"  now: {client.order(order.id).status} "
+                f"({client.order(order.id).cancellation_reason})"
+            )
         finally:
-            # Belt-and-suspenders cleanup. If we crashed somewhere above,
-            # this still wipes any resting orders we might have left.
-            try:
-                client.cancel_all_orders()
-            except STXException:
-                pass
+            leftovers = client.cancel_all_orders()
+            if leftovers:
+                print(f"  cleanup cancelled {len(leftovers)} leftover order(s)")
 
 
 if __name__ == "__main__":

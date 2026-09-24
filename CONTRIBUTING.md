@@ -32,7 +32,7 @@ export STX_KEY_ID=... STX_PRIVATE_KEY=$HOME/.stx/us-demo.pem
 python3 quickstart.py   # or whichever file you changed
 ```
 
-Keep diffs small and focused. One concern per PR makes review cheap. Build the client through `demo_config.make_client()` (or `make_async_client()` / `make_ws()`) rather than constructing `STX(...)` directly, so the configuration story stays consistent across scripts.
+Keep diffs small and focused. One concern per PR makes review cheap. Build the client through `demo_config.make_client()` (or `make_async_client()`, then `client.websocket()` for streams) rather than constructing `STX(...)` directly, so the configuration story stays consistent across scripts.
 
 ## What not to submit
 

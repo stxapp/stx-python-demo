@@ -4,11 +4,12 @@ Each example builds its client through this module so that they all
 agree on three things:
 
 1. **Where to connect.** The SDK reads ``STX_REGION`` / ``STX_ENV`` (or
-   ``STX_HOST``) from the environment. When none of them is set, the
-   scripts default to the public US demo environment (``region="us"``,
-   ``env="demo"``), which uses no real money. Nothing is hardcoded in
-   the individual scripts, so setting an environment variable is enough
-   to point every example somewhere else.
+   ``STX_HOST``) from the environment, or the profile named by
+   ``STX_PROFILE``. When none of them is set, the scripts default to the
+   public US demo environment (``region="us"``, ``env="demo"``), which
+   uses no real money. Nothing is hardcoded in the individual scripts,
+   so setting an environment variable is enough to point every example
+   somewhere else.
 
 2. **Credentials.** ``STX_KEY_ID`` / ``STX_PRIVATE_KEY`` are read by the
    SDK itself and every request is signed with them; there is no login
@@ -29,16 +30,23 @@ Usage from a script::
         me = client.me()
         ...
 
-``make_async_client()`` and ``make_ws()`` do the same for ``AsyncSTX``
-and ``STXWebSocket``.
+``make_async_client()`` does the same for ``AsyncSTX``; open a socket
+with ``client.websocket()`` on an async client. ``find_tradeable_market``,
+``open_market_ids``, ``listen`` and ``seconds_arg`` are small helpers the
+scripts share.
 """
+
 from __future__ import annotations
 
+import argparse
+import asyncio
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
+from typing import Callable, List, Optional
 
-from stx import STX, AsyncSTX, STXWebSocket
+from stx import STX, AsyncSTX, Channel, ChannelMessage
 
 DEFAULT_REGION = "us"
 DEFAULT_ENV = "demo"
@@ -90,15 +98,18 @@ def require_credentials() -> None:
 
 
 def connection_kwargs() -> dict:
-    """Resolve the connection kwargs shared by all three client classes.
+    """Resolve the connection kwargs shared by both client classes.
 
-    ``STX_HOST`` wins outright. Otherwise ``STX_REGION`` / ``STX_ENV`` are
-    used, each falling back to the US demo default when unset.
+    ``STX_HOST`` wins outright. A profile (``STX_PROFILE``) with no region
+    or env variables set decides for itself. Otherwise ``STX_REGION`` /
+    ``STX_ENV`` are used, each falling back to the US demo default.
     """
     load_dotenv()
     host = os.getenv("STX_HOST")
     if host:
         return {"host": host}
+    if os.getenv("STX_PROFILE") and not (os.getenv("STX_REGION") or os.getenv("STX_ENV")):
+        return {}
     region = (os.getenv("STX_REGION") or DEFAULT_REGION).lower()
     env = (os.getenv("STX_ENV") or DEFAULT_ENV).lower()
     return {"region": region, "env": env}
@@ -109,6 +120,8 @@ def describe_target() -> str:
     kwargs = connection_kwargs()
     if "host" in kwargs:
         return kwargs["host"]
+    if not kwargs:
+        return f"profile {os.getenv('STX_PROFILE')}"
     return f"{kwargs['region']}/{kwargs['env']}"
 
 
@@ -127,6 +140,67 @@ def make_async_client(**kwargs) -> AsyncSTX:
     return _build(AsyncSTX, **kwargs)
 
 
-def make_ws(**kwargs) -> STXWebSocket:
-    """WebSocket client for the configured environment."""
-    return _build(STXWebSocket, **kwargs)
+def find_tradeable_market(client: STX):
+    """An open, trading market whose event has not started, or ``None``.
+
+    Sorting by event start, latest first, puts far-future events at the
+    top, so the first page almost always has one.
+    """
+    for market in client.iter_markets(
+        status="open", trading=True, sort_by="event_start", sort_direction="desc"
+    ):
+        if market.event_status == "scheduled":
+            return market
+    return None
+
+
+async def open_market_ids(client: AsyncSTX, count: int = 5) -> List[str]:
+    """Ids of up to ``count`` open markets, for channels that need some."""
+    page = await client.markets(status="open", trading=True, limit=count)
+    return [m.market_id for m in page]
+
+
+def seconds_arg(default: float = 20.0, doc: Optional[str] = None) -> float:
+    """Parse ``--seconds N`` from the command line."""
+    parser = argparse.ArgumentParser(description=doc)
+    parser.add_argument(
+        "--seconds",
+        type=float,
+        default=default,
+        help=f"how long to listen (default {default:g})",
+    )
+    return parser.parse_args().seconds
+
+
+def hms() -> str:
+    return datetime.now().strftime("%H:%M:%S")
+
+
+async def listen(
+    channel: Channel,
+    seconds: float,
+    show: Callable[[ChannelMessage], str],
+    limit: int = 20,
+) -> int:
+    """Print up to ``limit`` messages from ``channel`` for ``seconds``.
+
+    Returns how many arrived. ``show`` turns one message into a line.
+    """
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + seconds
+    count = 0
+    while count < limit:
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            break
+        try:
+            msg = await channel.next(timeout=remaining)
+        except asyncio.TimeoutError:
+            break
+        count += 1
+        print(f"  [{hms()}] {msg.event:<22} {show(msg)}")
+    if count == 0:
+        print(
+            f"  (nothing arrived on {channel.name} in {seconds:g}s; the demo exchange can be quiet)"
+        )
+    return count

@@ -1,90 +1,53 @@
-"""History pulls: orders, trades, settlements with Page semantics.
+"""History pulls: orders, fills and settlements, one page at a time.
 
-The three history ops all return ``Page[T]``, iterable + ``.count``
-for the server total. Useful for reconciliation, end-of-session
-reports, and tax export.
+Every list call returns a ``Page``: iterate it like a list, and pass
+``page.cursor`` back for the next page (``None`` on the last one). The
+``iter_*`` methods follow the cursor for you. Useful for
+reconciliation, end-of-session reports and tax export.
+
+Amounts are dollar strings and contract counts are quantity strings,
+printed as the API sends them.
 
 Run:
     export STX_KEY_ID="your-key-id"
     export STX_PRIVATE_KEY="$HOME/.stx/us-demo.pem"
     python history_pulls.py
-
-Note: monetary fields on the wire are integer cents; divide by 100
-to display dollars.
 """
-from __future__ import annotations  # PEP 604 union syntax in helpers (3.9 compat)
 
-from stx import Selection
+from itertools import islice
 
 from demo_config import make_client
 
 PAGE_LIMIT = 10
 
 
-def _fmt_cents(c: int | None) -> str:
-    return "  -" if c is None else f"${c / 100:>8,.2f}"
-
-
 def main() -> None:
     with make_client() as client:
-        # ---- Orders ---------------------------------------------------
-        # ``client.orders`` returns Page[Order]; flat Selection auto-wraps
-        # under the inner list field, no envelope boilerplate.
-        orders = client.orders(
-            pagination={"page": 0, "limit": PAGE_LIMIT},
-            selections=Selection(
-                "id", "market_id", "status", "action",
-                "price", "quantity", "filled", "time",
-            ),
-        )
-        print(f"Orders: showing {len(orders)} of {orders.count}")
+        orders = client.orders(limit=PAGE_LIMIT)
+        print(f"Orders: {len(orders)} on this page (more: {orders.has_more})")
         for o in orders:
             print(
-                f"  {(o.id or '-'):<14} {(o.market_id or '-'):<14} "
-                f"{(o.action or '-'):<5} "
-                f"qty={o.quantity or 0:>5}/{o.filled or 0:<5}  "
-                f"px={_fmt_cents(o.price)}  "
-                f"{(o.status or '-'):<10} {o.time or ''}"
+                f"  {o.id}  {o.action:<4} {o.filled}/{o.quantity} @ {o.price or 'market'}  "
+                f"{o.status:<10} {o.time}"
             )
 
-        # ---- Trades ---------------------------------------------------
-        # Trade.filled is the executed quantity (NOT `quantity`).
-        trades = client.trades(
-            pagination={"page": 0, "limit": PAGE_LIMIT},
-            selections=Selection(
-                "id", "market_id", "action", "price", "filled",
-                "premium", "time",
-            ),
-        )
-        print(f"\nTrades: showing {len(trades)} of {trades.count}")
-        for t in trades:
+        if orders.cursor:
+            older = client.orders(limit=PAGE_LIMIT, cursor=orders.cursor)
+            print(f"  next page: {len(older)} more")
+
+        fills = client.fills(limit=PAGE_LIMIT)
+        print(f"\nFills: {len(fills)} on this page")
+        for f in fills:
             print(
-                f"  {(t.id or '-'):<14} {(t.market_id or '-'):<14} "
-                f"{(t.action or '-'):<5} "
-                f"filled={t.filled or 0:>5}  "
-                f"px={_fmt_cents(t.price)}  "
-                f"premium={_fmt_cents(t.premium)}  {t.time or ''}"
+                f"  {f.trade_id}  {f.action:<4} {f.filled} @ {f.price}  "
+                f"fee {f.total_fee}  {f.status:<8} {f.time}"
             )
 
-        # ---- Settlements ----------------------------------------------
-        # `inserted_at_iso` is the human-readable ISO timestamp;
-        # `realized_pnl` is profit/loss net of fees; `type` is a
-        # SettlementType enum, so print its `.value`.
-        settlements = client.settlements(
-            pagination={"page": 0, "limit": PAGE_LIMIT},
-            selections=Selection(
-                "id", "market_id", "type", "quantity",
-                "realized_pnl", "fee", "inserted_at_iso",
-            ),
-        )
-        print(f"\nSettlements: showing {len(settlements)} of {settlements.count}")
-        for s in settlements:
+        print("\nSettlements (first 25 across pages)")
+        for s in islice(client.iter_settlements(limit=PAGE_LIMIT), 25):
             print(
-                f"  {(s.id or '-'):<14} {(s.market_id or '-'):<14} "
-                f"{getattr(s.type, 'value', s.type) or '-':<14} "
-                f"qty={s.quantity or 0:>5}  "
-                f"pnl={_fmt_cents(s.realized_pnl)}  "
-                f"fee={_fmt_cents(s.fee)}  {s.inserted_at_iso or ''}"
+                f"  {s.id}  {s.type:<13} qty {s.quantity}  "
+                f"{s.opening_price} -> {s.closing_price}  pnl {s.realized_pnl}  fee {s.fee}"
             )
 
 

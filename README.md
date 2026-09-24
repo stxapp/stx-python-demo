@@ -32,7 +32,7 @@ cp .env.example .env      # then fill in STX_KEY_ID and STX_PRIVATE_KEY
 python quickstart.py
 ```
 
-The scripts load `.env` automatically. If you prefer, export the variables in your shell instead:
+The scripts load `.env` automatically. If you prefer, export the variables in your shell instead, or name a profile in `~/.stx/credentials` with `STX_PROFILE`:
 
 ```bash
 export STX_KEY_ID="your-key-id"
@@ -41,6 +41,8 @@ python quickstart.py
 ```
 
 There is no login call: every request, and the WebSocket handshake, is signed with the key. When the credentials are missing, every script prints a short explanation and exits instead of a traceback.
+
+**Amounts are strings.** Every price, balance and fee comes back as a dollar string exactly as the API sends it (`"0.5600"`), and every quantity as a contract count string (`"2.00"`). The scripts print them as they are. Orders take strings too: `place_order(market_id, "buy", "limit", price="0.01", quantity="1")`.
 
 ## Examples
 
@@ -55,54 +57,53 @@ There is no login call: every request, and the WebSocket handshake, is signed wi
 
 | Script | What it shows |
 |---|---|
-| [`list_markets.py`](./list_markets.py) | Top-N most-active OPEN markets in a table, the view you open to find something to trade. |
-| [`account_overview.py`](./account_overview.py) | Identity, deposits and withdrawals, loyalty activity, per-market position stats. |
-| [`history_pulls.py`](./history_pulls.py) | Paginated `orders`, `trades` and `settlements` using `Page[T]`. |
+| [`list_markets.py`](./list_markets.py) | The most active open markets in a table, walking pages with `iter_markets`. |
+| [`account_overview.py`](./account_overview.py) | Identity, balance, open positions, deposits and withdrawals, loyalty, per-market stats. |
+| [`history_pulls.py`](./history_pulls.py) | Orders, fills and settlements, one `Page` at a time and across pages with the cursor. |
 
 ### Trading
 
 | Script | What it shows |
 |---|---|
-| [`safe_order_round_trip.py`](./safe_order_round_trip.py) | Check the key's scope, place a 1 cent LIMIT BUY that never fills, confirm it appears in history, cancel it. Cleans up in a `finally` block. |
+| [`safe_order_round_trip.py`](./safe_order_round_trip.py) | Check the key's scope, place a 1-cent limit buy that never fills, find it by `client_order_id`, cancel it. Cleans up in a `finally` block. |
+| [`batch_orders.py`](./batch_orders.py) | `place_orders` in one request (two resting buys and one the exchange rejects), then `cancel_orders` and `cancel_all_orders`. |
 
-### WebSocket streaming: markets channel
+### WebSocket channels
 
-The broadcast `markets` channel supports server-side filtering on `fields`, `rule_filters` and `message_types`, plus dynamic re-selection after joining. Each script listens for about 20 seconds and focuses on one capability.
+One script per documented channel. Each joins, prints the join reply and the snapshot where the channel has one, then prints what arrives for `--seconds` (default 20). The demo exchange can be quiet, so an empty listen window is normal.
 
-| Script | What it shows |
-|---|---|
-| [`ws_markets_basic.py`](./ws_markets_basic.py) | Default join: every field, every rule, both message types. |
-| [`ws_markets_bids_offers.py`](./ws_markets_bids_offers.py) | Narrow `fields` to `["bids", "offers"]` for a liquidity-only feed. |
-| [`ws_markets_rule_filters.py`](./ws_markets_rule_filters.py) | Server-side filter to specific market rule types (for example `spread`, `home_winner`). |
-| [`ws_markets_message_types.py`](./ws_markets_message_types.py) | Receive only `market_updated` events and skip `market_created`. |
-| [`ws_markets_dynamic.py`](./ws_markets_dynamic.py) | Change filters mid-stream with `ws.push(...)`: `select_fields`, `select_rule_filters`. |
-| [`ws_markets_order_book.py`](./ws_markets_order_book.py) | Pin to one market and render its top of book. Discovers an OPEN market if `STX_MARKET_ID` is unset. |
-| [`ws_markets_multi_order_book.py`](./ws_markets_multi_order_book.py) | Maintain a dict of order books for every market matching a rule filter. |
+| Script | Channel | What it shows |
+|---|---|---|
+| [`ws_orderbook.py`](./ws_orderbook.py) | `orderbook` | Full book per market on every push; `select_market_ids` to change markets. |
+| [`ws_ticker.py`](./ws_ticker.py) | `ticker` | Price, top of book and volume whenever a market moves. |
+| [`ws_trades.py`](./ws_trades.py) | `trades` | Every execution on the exchange, anonymised, with the taker's side. |
+| [`ws_markets.py`](./ws_markets.py) | `markets` | `market_created` / `market_updated` deltas for every market; `select_message_types`. |
+| [`ws_market_stats.py`](./ws_market_stats.py) | `market_stats` | Price history in the join reply, bucket updates after; `request_series`. |
+| [`ws_market_updates.py`](./ws_market_updates.py) | `market_updates` | Changes for the markets you `watch`. |
+| [`ws_orders.py`](./ws_orders.py) | `orders:{user_id}` | `all_orders` snapshot, then `new_open_order`; places and cancels a 1-cent order to show the pushes. `--cancel-on-disconnect` arms that control. |
+| [`ws_fills.py`](./ws_fills.py) | `fills:{user_id}` | `all_trades` snapshot, then one `trade` per execution. |
+| [`ws_positions.py`](./ws_positions.py) | `positions:{user_id}` | `all_positions` snapshot, then `updated_positions` deltas. |
+| [`ws_settlements.py`](./ws_settlements.py) | `settlements:{user_id}` | Recent settlements over REST, then `new_settlements` as they happen. |
+| [`ws_balances.py`](./ws_balances.py) | `balances:{user_id}` | Balance and fee summary on join, then `update` and `payment_update`. |
+| [`ws_account.py`](./ws_account.py) | `account:{user_id}` | All four account snapshots on one join, then everything the per-type channels push. |
+| [`ws_user_info.py`](./ws_user_info.py) | `user_info:{user_id}` | Your profile on join, then any change. |
 
-### WebSocket streaming: your account
-
-Per-user channels are keyed on your user id. Under API-key authentication there is no login response to read it from, so each of these scripts calls `client.me()` once before joining; that seeds the id for every client in the process.
-
-| Script | What it shows |
-|---|---|
-| [`ws_personal_stream.py`](./ws_personal_stream.py) | Subscribe to the per-user `PORTFOLIO` and `ORDERS` channels (scoped to your account automatically). |
-| [`ws_trades_stream.py`](./ws_trades_stream.py) | Subscribe to `TRADES`: your fills as they land, instead of polling `trades()`. |
-| [`ws_settlements_stream.py`](./ws_settlements_stream.py) | Subscribe to `SETTLEMENTS`: a frame each time one of your positions resolves. |
+The SDK sends the socket heartbeat, pings each channel on a timer, and reconnects and rejoins with your filters after a drop.
 
 ### Long-running
 
 | Script | What it shows |
 |---|---|
-| [`worker.py`](./worker.py) | The bot skeleton: one socket, `MARKETS` (bids and offers) plus your own `ORDERS`, printing events until Ctrl-C. `--seconds N` bounds the run. |
+| [`worker.py`](./worker.py) | The bot skeleton: one socket with `orderbook` for five markets plus your `orders` and `fills`, printing events until Ctrl-C. `--seconds N` bounds the run. |
 
 ### Async patterns
 
 | Script | What it shows |
 |---|---|
 | [`async_parallel_pulls.py`](./async_parallel_pulls.py) | `AsyncSTX` with `asyncio.gather` over independent calls, timing serial against parallel. |
-| [`async_with_ws.py`](./async_with_ws.py) | Event-driven bot pattern: the WebSocket pushes events, `AsyncSTX` reacts over HTTP. |
+| [`async_with_ws.py`](./async_with_ws.py) | Event-driven pattern: `ticker` pushes, `AsyncSTX` looks the market up over REST. |
 
-All scripts build their client through [`demo_config.py`](./demo_config.py), which reads the configuration below, loads `.env`, and checks for credentials. Copy it alongside any script you take out of this repo.
+All scripts build their client through [`demo_config.py`](./demo_config.py), which reads the configuration below, loads `.env`, checks for credentials, and holds the few helpers the scripts share. Copy it alongside any script you take out of this repo.
 
 ## Configuration
 
@@ -110,13 +111,12 @@ All scripts build their client through [`demo_config.py`](./demo_config.py), whi
 |---|---|
 | `STX_KEY_ID` | Your API key id. |
 | `STX_PRIVATE_KEY` | Path to the key's Ed25519 PEM file, or the PEM text itself. |
-| `STX_PROFILE` | Optional. A profile name in `~/.stx/credentials` to read the key from instead of the two variables above. |
+| `STX_PROFILE` | Optional. A profile name in `~/.stx/credentials` to read the key (and host) from instead of the variables above. |
 | `STX_REGION` | `us` or `ontario`. Default: `us`. |
 | `STX_ENV` | `demo` or `production`. Default: `demo`. |
-| `STX_HOST` | Optional. A hostname that overrides `STX_REGION` and `STX_ENV` entirely. |
-| `STX_MARKET_ID` | Optional. Pins `ws_markets_order_book.py` to one market. |
+| `STX_HOST` | Optional. A hostname or URL that overrides `STX_REGION` and `STX_ENV` entirely. |
 
-The SDK reads these variables itself, with explicit constructor arguments taking precedence over the environment and the environment over a profile in `~/.stx/credentials`. The scripts pass no hardcoded region or environment, so the variables are honoured. Accounts and API keys do not carry across exchanges: a key issued for the US demo does not authenticate against the Ontario one.
+The SDK reads these variables itself, with explicit constructor arguments taking precedence over the environment and the environment over a profile in `~/.stx/credentials`. Accounts and API keys do not carry across exchanges: a key issued for the US demo does not authenticate against the Ontario one.
 
 An API key is issued as `read_only` or `read_write`. Market data and history work with either; placing or cancelling orders needs `read_write`. `identity.py` shows which one you hold.
 

@@ -75,56 +75,69 @@ jobs:
         run: python history_pulls.py
 
       # ---- Trading ------------------------------------------------
+      # 1-cent limit buys never fill; each script cancels what it placed
+      # and sweeps the account in a finally block.
       - name: safe_order_round_trip
-        # 1 cent LIMIT BUY never fills; try/finally cancel-all sweeps any
-        # leakage. Skips cleanly with SystemExit(0) if the env has no
-        # tradable markets right now or the key is read_only.
         timeout-minutes: 2
         run: python safe_order_round_trip.py
 
-      # ---- WebSocket streaming: markets channel ------------------
-      # Each WS script has a ~30s listen window; cap the step at 2min
-      # so a hung connection fails fast instead of burning the runner.
-      - name: ws_markets_basic
+      - name: batch_orders
         timeout-minutes: 2
-        run: python ws_markets_basic.py
+        run: python batch_orders.py
 
-      - name: ws_markets_bids_offers
+      # ---- WebSocket channels -------------------------------------
+      # Each script joins one documented channel and listens briefly.
+      - name: ws_orderbook
         timeout-minutes: 2
-        run: python ws_markets_bids_offers.py
+        run: python ws_orderbook.py --seconds 10
 
-      - name: ws_markets_rule_filters
+      - name: ws_ticker
         timeout-minutes: 2
-        run: python ws_markets_rule_filters.py
+        run: python ws_ticker.py --seconds 10
 
-      - name: ws_markets_message_types
+      - name: ws_trades
         timeout-minutes: 2
-        run: python ws_markets_message_types.py
+        run: python ws_trades.py --seconds 10
 
-      - name: ws_markets_dynamic
+      - name: ws_markets
         timeout-minutes: 2
-        run: python ws_markets_dynamic.py
+        run: python ws_markets.py --seconds 10
 
-      - name: ws_markets_order_book
+      - name: ws_market_stats
         timeout-minutes: 2
-        run: python ws_markets_order_book.py
+        run: python ws_market_stats.py --seconds 10
 
-      - name: ws_markets_multi_order_book
+      - name: ws_market_updates
         timeout-minutes: 2
-        run: python ws_markets_multi_order_book.py
+        run: python ws_market_updates.py --seconds 10
 
-      # ---- WebSocket streaming: user streams ---------------------
-      - name: ws_personal_stream
+      - name: ws_orders
         timeout-minutes: 2
-        run: python ws_personal_stream.py
+        run: python ws_orders.py --seconds 10
 
-      - name: ws_trades_stream
+      - name: ws_fills
         timeout-minutes: 2
-        run: python ws_trades_stream.py
+        run: python ws_fills.py --seconds 10
 
-      - name: ws_settlements_stream
+      - name: ws_positions
         timeout-minutes: 2
-        run: python ws_settlements_stream.py
+        run: python ws_positions.py --seconds 10
+
+      - name: ws_settlements
+        timeout-minutes: 2
+        run: python ws_settlements.py --seconds 10
+
+      - name: ws_balances
+        timeout-minutes: 2
+        run: python ws_balances.py --seconds 10
+
+      - name: ws_account
+        timeout-minutes: 2
+        run: python ws_account.py --seconds 10
+
+      - name: ws_user_info
+        timeout-minutes: 2
+        run: python ws_user_info.py --seconds 10
 
       # ---- Long-running -------------------------------------------
       - name: worker
@@ -138,4 +151,4 @@ jobs:
 
       - name: async_with_ws
         timeout-minutes: 2
-        run: python async_with_ws.py
+        run: python async_with_ws.py --seconds 15

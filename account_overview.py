@@ -1,120 +1,80 @@
-"""Account overview: identity, cash movements, loyalty, per-market positions.
+"""Account overview: identity, balance, positions, cash movements, per-market stats.
 
-Read-only snapshot of what an API key can see about your STX account.
-Useful as a first authenticated call (proves the key works) and as a
-starting point for portfolio-tracking scripts.
-
-An API key authenticates a trading integration rather than a person's
-account settings, so the ``account`` and ``user_profile`` operations
-are reserved for the session login path and rejected for a key. What a
-key can read: ``me``, ``my_deposit_and_withdrawal_history``,
-``loyalty_history``, ``account_market_stats``, plus every market,
-order, trade and settlement query.
+A read-only snapshot of what an API key can see about your account.
+Every amount is printed as the API sends it: a dollar string such as
+"154.7500". Nothing is converted.
 
 Run:
     export STX_KEY_ID="your-key-id"
     export STX_PRIVATE_KEY="$HOME/.stx/us-demo.pem"
     python account_overview.py
-
-Note: monetary fields on the wire are integer cents; divide by 100
-to display dollars.
 """
-from __future__ import annotations  # PEP 604 union syntax in helpers (3.9 compat)
 
-from datetime import datetime, timezone
-
-from stx import Selection
-from stx.exceptions import STXException
+from stx import STXNotFoundException
 
 from demo_config import make_client
 
 
-def _fmt_cents(c: int | None) -> str:
-    if c is None:
-        return "  -"
-    return f"${c / 100:>10,.2f}"
-
-
-def _fmt_us(us: int | None) -> str:
-    """Render a UNIX-microseconds timestamp as a short ISO date."""
-    if not us:
-        return "-"
-    return datetime.fromtimestamp(us / 1_000_000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
-
-
 def main() -> None:
     with make_client() as client:
-        # 1. Who the key belongs to.
         me = client.me()
         print("Identity")
         print(f"  user_id:      {me.user_id}")
         print(f"  account_id:   {me.account_id}")
-        print(f"  scope:        {me.scope.value if me.scope else '-'}")
+        print(f"  scope:        {me.scope}")
 
-        # 2. Deposits and withdrawals, most recent first. Items are
-        # TransactionHistory rows with a `type` of deposit / withdrawal.
-        print("\nDeposits and withdrawals (last 5)")
+        print("\nBalance")
         try:
-            moves = client.my_deposit_and_withdrawal_history(
-                selections=Selection("inserted_at", "type", "amount", "method"),
+            b = client.balance()
+            print(f"  available:    {b.available_balance}")
+            print(f"  cash:         {b.account_balance}")
+            print(f"  liabilities:  buy {b.buy_order_liability}  sell {b.sell_order_liability}")
+            print(f"  fee schedule: {b.fee_schedule}  tier {b.loyalty_tier}")
+        except STXNotFoundException:
+            print(
+                "  (GET /api/v1/account/balance is not served here yet; the balances channel has "
+                "it)"
             )
-            if not moves:
-                print("  (none)")
-            for t in list(moves)[:5]:
-                print(
-                    f"  {_fmt_us(t.inserted_at):<17} "
-                    f"{(t.type or '-'):<12} "
-                    f"amount={_fmt_cents(t.amount)}  "
-                    f"{t.method or '-'}"
-                )
-        except STXException as exc:
-            print(f"  (server error, skipping: {type(exc).__name__})")
 
-        # 3. Loyalty history, recent point-bearing transactions. Wrapped
-        # because this operation can intermittently return a server
-        # error, and a backend hiccup should not mask the rest of the demo.
+        print("\nOpen positions")
+        try:
+            positions = [p for p in client.positions() if p.position not in (None, "0.00")]
+            if not positions:
+                print("  (none)")
+            for p in positions[:10]:
+                print(
+                    f"  {p.market_id}  net {p.position:>8}  premium {p.premium:>10}  open risk "
+                    f"{p.open_risk}"
+                )
+        except STXNotFoundException:
+            print(
+                "  (GET /api/v1/positions is not served here yet; the positions channel has them)"
+            )
+
+        print("\nDeposits and withdrawals (last 5 each)")
+        for name in ("deposits", "withdrawals"):
+            rows = getattr(client, name)(limit=5)
+            if not rows.items:
+                print(f"  {name}: (none)")
+            for t in rows:
+                print(f"  {t.time}  {t.type:<11} {t.amount:>12}  {t.method or '-'}")
+
         print("\nLoyalty activity (last 5)")
-        try:
-            loyalty = client.loyalty_history(
-                pagination={"page": 0, "limit": 5},
-                selections=Selection("inserted_at", "type", "amount", "points"),
-            )
-            if not loyalty:
-                print("  (none)")
-            for h in loyalty:
-                print(
-                    f"  {_fmt_us(h.inserted_at):<17} "
-                    f"{(h.type or '-'):<14} "
-                    f"amount={_fmt_cents(h.amount)}  "
-                    f"points={h.points or 0:>+8.2f}"
-                )
-        except STXException as exc:
-            print(f"  (server error, skipping: {type(exc).__name__})")
+        loyalty = client.loyalty(limit=5)
+        if not loyalty.items:
+            print("  (none)")
+        for t in loyalty:
+            print(f"  {t.time}  {t.type:<24} amount={t.amount}  points={t.points}")
 
-        # 4. Per-market stats: your position, fees and settled contracts
-        # across every market you have traded. Empty if you never traded.
         print("\nPer-market stats (top 10)")
-        try:
-            stats = client.account_market_stats(
-                pagination={"page": 0, "limit": 10},
-                selections=Selection(
-                    "market_id", "title", "contracts_settled",
-                    "total_fees", "total_settlement_pnl", "updated_at",
-                ),
+        stats = client.account_market_stats(limit=10)
+        if not stats.items:
+            print("  (no markets traded yet)")
+        for s in stats:
+            print(
+                f"  {(s.title or s.market_id)[:36]:<36} position={s.position:>8}  "
+                f"fees={s.total_fees:>9}  net pnl={s.total_net_pnl:>10}"
             )
-            if not stats:
-                print("  (no settled positions yet)")
-            for s in stats:
-                title = (s.title or "-")[:30]
-                print(
-                    f"  {(s.market_id or '-'):<14} {title:<30} "
-                    f"contracts={s.contracts_settled or 0:>5}  "
-                    f"fees={_fmt_cents(s.total_fees)}  "
-                    f"pnl={_fmt_cents(s.total_settlement_pnl)}  "
-                    f"updated={_fmt_us(s.updated_at)}"
-                )
-        except STXException as exc:
-            print(f"  (server error, skipping: {type(exc).__name__})")
 
 
 if __name__ == "__main__":

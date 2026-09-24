@@ -1,16 +1,17 @@
-"""A small long-running worker: market updates plus your own orders.
+"""A small long-running worker: order books plus your own orders and fills.
 
-The shape most bots start from. One process, one socket, two
-subscriptions:
+The shape most bots start from. One process, one socket, three channels:
 
-- ``MARKETS`` (broadcast) narrowed server-side to bids and offers, so
-  the frames stay small.
-- ``ORDERS`` (per user) for state transitions on your own orders.
+- ``orderbook`` for a handful of open markets: each ``book`` push is the
+  full book for one market, so the worker replaces what it holds.
+- ``orders`` for your order updates (``all_orders`` on join, then
+  ``new_open_order``).
+- ``fills`` for your executions (``all_trades`` on join, then ``trade``).
 
-Each frame is printed with a timestamp and a running count. The worker
-runs until Ctrl-C, or for ``--seconds N`` if you pass it (handy for CI
-and for a first run). Reconnect, heartbeat and resubscribe are handled
-by the SDK, so a dropped connection resumes on its own.
+Every frame is printed with a timestamp and a running count. The worker
+runs until Ctrl-C, or for ``--seconds N``. Heartbeat, channel pings,
+reconnect and rejoin are handled by the SDK; ``on_reconnect`` is where
+a real bot would take a fresh REST snapshot.
 
 Run:
     export STX_KEY_ID="your-key-id"
@@ -18,86 +19,66 @@ Run:
     python worker.py                # until Ctrl-C
     python worker.py --seconds 60   # bounded run
 
-To see an ORDERS frame, run ``safe_order_round_trip.py`` in a second
-shell while this is listening.
+Run ``safe_order_round_trip.py`` in a second shell to see order frames.
 """
-from __future__ import annotations
 
 import argparse
 import asyncio
 import signal
 import sys
 from collections import Counter
-from datetime import datetime
+from typing import Dict, Optional
 
-from stx.enums import Channels
-
-from demo_config import describe_target, make_client, make_ws
+from demo_config import describe_target, hms, make_async_client, open_market_ids
 
 DEPTH = 3
 
 
-def _hms() -> str:
-    return datetime.now().strftime("%H:%M:%S")
+def _top(levels) -> str:
+    if not levels:
+        return "(empty)"
+    return ", ".join(f"{lvl['quantity']}@{lvl['price']}" for lvl in levels[:DEPTH])
 
 
-def _top(side, label: str) -> str:
-    if not side:
-        return f"{label}=(empty)"
-    rows = []
-    for lvl in (side or [])[:DEPTH]:
-        if isinstance(lvl, dict):
-            rows.append(f"{lvl.get('price')}x{lvl.get('quantity') or lvl.get('size')}")
-    return f"{label}=[{', '.join(rows)}]"
-
-
-async def run(seconds: float | None) -> None:
-    # One me() call at startup: it proves the key works and seeds the
-    # user id that the ORDERS topic is keyed on.
-    with make_client() as client:
-        me = client.me()
-    print(f"Authenticated as {me.user_id} (scope {me.scope.value}) on {describe_target()}")
-
+async def run(seconds: Optional[float]) -> None:
     counts: Counter = Counter()
+    books: Dict[str, dict] = {}
     stop = asyncio.Event()
 
-    async def on_market(msg) -> None:
-        if msg.is_join_reply:
-            print(f"  [{_hms()}] markets  joined  status={msg.reply_status}")
-            return
-        if msg.is_reply:
-            return
-        # Frames are dicts keyed by market_id, one entry per market.
-        for market_id, m in (msg.payload or {}).items():
-            if "bids" not in m and "offers" not in m:
-                continue  # a status tick with no book change
-            counts["market"] += 1
-            print(
-                f"  [{_hms()}] markets  #{counts['market']:<6} "
-                f"{market_id}  {_top(m.get('bids'), 'bids')}  "
-                f"{_top(m.get('offers'), 'offers')}"
-            )
-
-    async def on_order(msg) -> None:
-        if msg.is_join_reply:
-            print(f"  [{_hms()}] orders   joined  status={msg.reply_status}")
-            return
-        if msg.is_reply:
-            return
-        p = msg.payload or {}
-        if msg.event == "all_orders":
-            # Snapshot of your resting orders, sent once on join.
-            print(f"  [{_hms()}] orders   snapshot  {len(p.get('orders') or [])} resting")
-            return
-        counts["order"] += 1
+    def on_book(msg) -> None:
+        p = msg.payload
+        books[p["market_id"]] = p  # a full snapshot: replace, never merge
+        counts["book"] += 1
         print(
-            f"  [{_hms()}] orders   #{counts['order']:<6} "
-            f"{msg.event} id={p.get('id')} status={p.get('status')} "
-            f"filled={p.get('filled')}/{p.get('quantity')}"
+            f"  [{hms()}] book   #{counts['book']:<5} {p['market_id']}  bids {_top(p['bids'])}  "
+            f"offers {_top(p['offers'])}"
         )
 
-    # Ctrl-C (SIGINT) and `timeout` / a supervisor (SIGTERM) both end the
-    # run through the same path, so the socket is closed cleanly.
+    def on_order(msg) -> None:
+        if msg.event == "all_orders":
+            print(f"  [{hms()}] orders snapshot: {len(msg.payload['orders'])} open")
+            return
+        p = msg.payload
+        counts["order"] += 1
+        print(
+            f"  [{hms()}] order  #{counts['order']:<5} {p['id']} {p['status']} filled "
+            f"{p['filled']}/{p['quantity']} @ {p['price']}"
+        )
+
+    def on_fill(msg) -> None:
+        if msg.event == "all_trades":
+            print(f"  [{hms()}] fills  snapshot: {len(msg.payload['trades'])} open trades")
+            return
+        p = msg.payload
+        counts["fill"] += 1
+        print(
+            f"  [{hms()}] fill   #{counts['fill']:<5} {p['id']} {p['action']} {p['filled']} @ "
+            f"{p['price']} fee {p['total_fee']}"
+        )
+
+    async def on_reconnect() -> None:
+        print(f"  [{hms()}] reconnected; a real bot would re-read open orders over REST here")
+
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         try:
@@ -105,31 +86,32 @@ async def run(seconds: float | None) -> None:
         except NotImplementedError:  # Windows
             pass
 
-    async with make_ws() as ws:
-        await ws.join(
-            Channels.MARKETS,
-            on_message=on_market,
-            join_params={"fields": ["bids", "offers"], "message_types": ["market_updated"]},
-        )
-        await ws.join(Channels.ORDERS, on_message=on_order)
-        if seconds is None:
-            print("Running until Ctrl-C...")
-        else:
-            print(f"Running for {seconds:g}s...")
-        try:
-            await asyncio.wait_for(stop.wait(), seconds)
-        except asyncio.TimeoutError:
-            pass
+    async with make_async_client() as client:
+        me = await client.me()
+        print(f"Authenticated as {me.user_id} ({me.scope}) on {describe_target()}")
+        ids = await open_market_ids(client, 5)
+        async with client.websocket(on_reconnect=on_reconnect) as ws:
+            await ws.orderbook(ids, on_message=on_book)
+            await ws.orders(on_message=on_order)
+            await ws.fills(on_message=on_fill)
+            print(
+                f"Watching {len(ids)} books. "
+                + ("Running until Ctrl-C..." if seconds is None else f"Running for {seconds:g}s...")
+            )
+            try:
+                await asyncio.wait_for(stop.wait(), seconds)
+            except asyncio.TimeoutError:
+                pass
 
-    print(f"\nStopped. {counts['market']} market frame(s), {counts['order']} order frame(s).")
+    print(
+        f"\nStopped. {counts['book']} book, {counts['order']} order, {counts['fill']} fill "
+        f"frame(s); {len(books)} books held."
+    )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument(
-        "--seconds", type=float, default=None,
-        help="stop after this many seconds instead of running until Ctrl-C",
-    )
+    parser.add_argument("--seconds", type=float, default=None, help="stop after this many seconds")
     args = parser.parse_args()
     try:
         asyncio.run(run(args.seconds))
