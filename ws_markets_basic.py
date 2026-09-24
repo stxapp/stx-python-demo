@@ -5,9 +5,14 @@ frame for ``LISTEN_WINDOW_SECONDS``. The default join asks the server
 for every optional field, no rule filtering, and both
 ``market_updated`` + ``market_created`` events.
 
+Frame shape: the payload is a dict keyed by ``market_id``, one entry
+per market in the frame, and each value carries only the fields that
+changed (plus the mandatory ``market_id`` / ``timestamp`` /
+``unix_timestamp``). Iterate ``payload.items()`` to get at them.
+
 Run:
-    export STX_EMAIL="you@example.com"
-    export STX_PASSWORD="..."
+    export STX_KEY_ID="your-key-id"
+    export STX_PRIVATE_KEY="$HOME/.stx/us-demo.pem"
     python ws_markets_basic.py
 """
 import asyncio
@@ -17,9 +22,9 @@ from datetime import datetime
 
 from stx.enums import Channels
 
-from demo_config import make_client, make_ws
+from demo_config import make_ws
 
-LISTEN_WINDOW_SECONDS = 30
+LISTEN_WINDOW_SECONDS = 20
 
 
 def _hms() -> str:
@@ -27,9 +32,6 @@ def _hms() -> str:
 
 
 async def stream() -> None:
-    with make_client() as client:
-        client.login()
-
     events: Counter = Counter()
     received = 0
 
@@ -39,12 +41,13 @@ async def stream() -> None:
         if msg.is_join_reply:
             print(f"  [{_hms()}] join-reply  status={msg.reply_status}")
             return
-        received += 1
-        p = msg.payload or {}
-        print(
-            f"  [{_hms()}] {msg.event:<18} "
-            f"market_id={p.get('market_id')} title={p.get('title')!r}"
-        )
+        if msg.is_reply:
+            return
+        for market_id, fields in (msg.payload or {}).items():
+            received += 1
+            mandatory = ("market_id", "timestamp", "unix_timestamp")
+            changed = sorted(k for k in fields if k not in mandatory)
+            print(f"  [{_hms()}] {msg.event:<16} {market_id}  changed={changed}")
 
     async with make_ws() as ws:
         await ws.join(Channels.MARKETS, on_message=on_msg)
@@ -54,7 +57,7 @@ async def stream() -> None:
         except asyncio.TimeoutError:
             pass
 
-    print(f"\nReceived {received} updates in {LISTEN_WINDOW_SECONDS}s:")
+    print(f"\nReceived {received} market updates in {LISTEN_WINDOW_SECONDS}s:")
     for event, count in sorted(events.items(), key=lambda x: -x[1]):
         print(f"  {event:<25} {count}")
     if not received:

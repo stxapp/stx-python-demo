@@ -3,15 +3,16 @@
 Pins to one ``market_id`` and renders its top-of-book bids / offers as
 they update. The ``markets`` channel has no native ``market_id`` filter
 (only ``fields`` / ``rule_filters`` / ``message_types``), so we narrow
-server-side to the bids/offers fields and filter client-side for the
-target market.
+server-side to the bids/offers fields and pick our market out of each
+frame client-side. Frames are dicts keyed by ``market_id``, so that is
+a single lookup.
 
 Set ``STX_MARKET_ID`` in the environment to pin a specific market, or leave it
 unset and the script auto-discovers an OPEN market via the HTTP API.
 
 Run:
-    export STX_EMAIL="you@example.com"
-    export STX_PASSWORD="..."
+    export STX_KEY_ID="your-key-id"
+    export STX_PRIVATE_KEY="$HOME/.stx/us-demo.pem"
     # Optional: pin a specific market
     # export STX_MARKET_ID="..."
     python ws_markets_order_book.py
@@ -27,7 +28,7 @@ from stx.enums import Channels
 
 from demo_config import make_client, make_ws
 
-LISTEN_WINDOW_SECONDS = 30
+LISTEN_WINDOW_SECONDS = 20
 DEPTH = 5
 
 
@@ -53,7 +54,8 @@ def _resolve_market_id(client: STX) -> str:
     if override:
         return override
     page = client.markets(
-        status=["OPEN"],
+        status="OPEN",
+        trading="TRUE",
         limit=1,
         selections=Selection("market_id", "title"),
     )
@@ -68,9 +70,8 @@ def _resolve_market_id(client: STX) -> str:
 
 
 async def stream() -> None:
-    client = make_client()
-    client.login()
-    target = _resolve_market_id(client)
+    with make_client() as client:
+        target = _resolve_market_id(client)
 
     events: Counter = Counter()
     matched = 0
@@ -81,13 +82,15 @@ async def stream() -> None:
         if msg.is_join_reply:
             print(f"  [{_hms()}] join-reply  watching market_id={target!r}")
             return
-        p = msg.payload or {}
-        if p.get("market_id") != target:
+        if msg.is_reply:
+            return
+        m = (msg.payload or {}).get(target)
+        if not m:
             return
         matched += 1
-        print(f"\n  [{_hms()}] === update #{matched} @ {p.get('timestamp')} ===")
-        print(_ladder(p.get("bids"), "bids"))
-        print(_ladder(p.get("offers"), "offers"))
+        print(f"\n  [{_hms()}] === update #{matched} @ {m.get('timestamp')} ===")
+        print(_ladder(m.get("bids"), "bids"))
+        print(_ladder(m.get("offers"), "offers"))
 
     async with make_ws() as ws:
         await ws.join(

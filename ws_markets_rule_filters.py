@@ -10,8 +10,8 @@ disable filtering, or do it dynamically with ``ws.push(...)``; see
 ``ws_markets_dynamic.py``.
 
 Run:
-    export STX_EMAIL="you@example.com"
-    export STX_PASSWORD="..."
+    export STX_KEY_ID="your-key-id"
+    export STX_PRIVATE_KEY="$HOME/.stx/us-demo.pem"
     python ws_markets_rule_filters.py
 """
 import asyncio
@@ -21,9 +21,9 @@ from datetime import datetime
 
 from stx.enums import Channels
 
-from demo_config import make_client, make_ws
+from demo_config import make_ws
 
-LISTEN_WINDOW_SECONDS = 30
+LISTEN_WINDOW_SECONDS = 20
 RULE_FILTERS = ["spread", "home_winner"]
 
 
@@ -32,9 +32,6 @@ def _hms() -> str:
 
 
 async def stream() -> None:
-    with make_client() as client:
-        client.login()
-
     events: Counter = Counter()
     by_rule: Counter = Counter()
     received = 0
@@ -43,20 +40,26 @@ async def stream() -> None:
         nonlocal received
         events[msg.event] += 1
         if msg.is_join_reply:
-            p = msg.payload or {}
+            r = (msg.payload or {}).get("response") or {}
+            available = r.get("available_rules") or []
             print(f"  [{_hms()}] join-reply")
-            print(f"    selected_rule_filters={p.get('selected_rule_filters')}")
-            print(f"    available_rules={p.get('available_rules')}")
+            print(f"    selected_rule_filters={r.get('selected_rule_filters')}")
+            print(f"    available_rules ({len(available)}): {available[:12]} ...")
             return
-        received += 1
-        p = msg.payload or {}
-        rules = p.get("rules")
-        if isinstance(rules, str):
-            by_rule[rules] += 1
-        print(
-            f"  [{_hms()}] {msg.event:<18} "
-            f"market_id={p.get('market_id')} rules={rules}"
-        )
+        if msg.is_reply:
+            return
+        # A market_created frame carries the full market, including its
+        # `rules`; a market_updated frame carries only what changed, so
+        # the rule is not repeated (the server has already filtered).
+        for market_id, m in (msg.payload or {}).items():
+            received += 1
+            rules = m.get("rules")
+            if isinstance(rules, str):
+                by_rule[rules] += 1
+            print(
+                f"  [{_hms()}] {msg.event:<16} {market_id}  "
+                f"rules={rules or '(not in frame)'}  title={m.get('title')!r}"
+            )
 
     async with make_ws() as ws:
         await ws.join(
@@ -73,11 +76,11 @@ async def stream() -> None:
         except asyncio.TimeoutError:
             pass
 
-    print(f"\nReceived {received} updates in {LISTEN_WINDOW_SECONDS}s:")
+    print(f"\nReceived {received} market updates in {LISTEN_WINDOW_SECONDS}s:")
     for event, count in sorted(events.items(), key=lambda x: -x[1]):
         print(f"  {event:<25} {count}")
     if by_rule:
-        print("By rule type:")
+        print("By rule type (market_created frames only):")
         for rule, count in sorted(by_rule.items(), key=lambda x: -x[1]):
             print(f"  {rule:<20} {count}")
     if not received:
