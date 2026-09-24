@@ -14,7 +14,10 @@ dist/
 .idea/
 .vscode/
 
-# Local credentials — never commit
+# Local credentials: never commit
 .env
 .env.*
 !.env.example
+
+# Tooling
+.ruff_cache/

@@ -1,0 +1,10 @@
+# Offline lint for the demo scripts. Kept minimal on purpose:
+#   E = pycodestyle errors, F = pyflakes, I = import ordering.
+line-length = 100
+target-version = "py39"
+
+[lint]
+select = ["E", "F", "I"]
+
+[lint.isort]
+known-first-party = ["demo_config"]
