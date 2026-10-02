@@ -1,20 +1,10 @@
-# Python
 .venv/
 venv/
-env/
 __pycache__/
 *.py[cod]
-*$py.class
-*.egg-info/
-build/
-dist/
-
-# Editor / OS
-.DS_Store
-.idea/
-.vscode/
-
-# Local credentials — never commit
+.ruff_cache/
+.pytest_cache/
 .env
-.env.*
-!.env.example
+*.pem
+*.log
+.DS_Store
