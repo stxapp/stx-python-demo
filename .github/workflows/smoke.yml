@@ -1,0 +1,113 @@
+name: Smoke
+
+# Runs every example against the public demo exchanges, selected with
+# STX_REGION and STX_ENV exactly as a customer would, using stx-python from
+# PyPI as pinned in requirements.txt. The trade example places one 1% buy that
+# rests on the book and cancels it before it exits.
+#
+# Needs these repository secrets (read_write API keys, the PEM as text):
+#   US_DEMO_API_KEY_ID, US_DEMO_API_KEY_PEM            (region us, env demo)
+#   ONTARIO_DEMO_API_KEY_ID, ONTARIO_DEMO_API_KEY_PEM  (region ontario, env demo)
+# US demo is required. Ontario demo is skipped when its secrets are not set.
+#
+# Pull requests from forks get no secrets, so the job is skipped for them.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "23 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smoke-${{ github.head_ref || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      # One exchange at a time: both legs may share a test account.
+      max-parallel: 1
+      matrix:
+        include:
+          - name: us-demo
+            prefix: US_DEMO
+            region: us
+            env: demo
+            required: true
+          - name: ontario-demo
+            prefix: ONTARIO_DEMO
+            region: ontario
+            env: demo
+            required: false
+    name: smoke (${{ matrix.name }})
+    env:
+      STX_REGION: ${{ matrix.region }}
+      STX_ENV: ${{ matrix.env }}
+      STX_KEY_ID: ${{ secrets[format('{0}_API_KEY_ID', matrix.prefix)] }}
+      STX_PRIVATE_KEY: ${{ secrets[format('{0}_API_KEY_PEM', matrix.prefix)] }}
+    steps:
+      - name: API key
+        id: gate
+        run: |
+          if [ -n "$STX_KEY_ID" ] && [ -n "$STX_PRIVATE_KEY" ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          elif [ "${{ matrix.required }}" = "true" ]; then
+            echo "::error::Secrets ${{ matrix.prefix }}_API_KEY_ID and ${{ matrix.prefix }}_API_KEY_PEM must be set to run the examples on ${{ matrix.name }}."
+            exit 1
+          else
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::${{ matrix.prefix }}_API_KEY_ID / ${{ matrix.prefix }}_API_KEY_PEM not set; skipping ${{ matrix.name }}."
+          fi
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.skip != 'true'
+      - uses: actions/setup-python@v5
+        if: steps.gate.outputs.skip != 'true'
+        with:
+          python-version: "3.12"
+      - name: Install stx-python from PyPI
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -c "import stx; print('stx-python', stx.__version__)"
+
+      - name: python examples/markets.py
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          set -o pipefail
+          python examples/markets.py | tee markets.log
+          grep -q 'markets shown' markets.log || { echo "::error::markets printed no summary on ${{ matrix.name }}"; exit 1; }
+
+      - name: python examples/trade.py
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          set -o pipefail
+          python examples/trade.py | tee trade.log
+          grep -q '^Placed: ' trade.log || { echo "::error::trade placed no order on ${{ matrix.name }}"; exit 1; }
+          grep -q '^Final:   status cancelled' trade.log || { echo "::error::trade did not end with its order cancelled on ${{ matrix.name }}"; exit 1; }
+
+      - name: python examples/live.py
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          set -o pipefail
+          python examples/live.py 10 | tee live.log
+          grep -q '^\[account\] available ' live.log || { echo "::error::live received no account snapshot on ${{ matrix.name }}"; exit 1; }
+          grep -q '^Closed\. ' live.log || { echo "::error::live did not close cleanly on ${{ matrix.name }}"; exit 1; }
+
+      - name: python examples/portfolio.py
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          set -o pipefail
+          python examples/portfolio.py | tee portfolio.log
+          grep -q '^Balance: ' portfolio.log || { echo "::error::portfolio printed no balance on ${{ matrix.name }}"; exit 1; }
+          # A warning, not a failure: other clients may share this account.
+          grep -q '^Open orders: 0' portfolio.log || echo "::warning::the account on ${{ matrix.name }} has open orders after the run"
