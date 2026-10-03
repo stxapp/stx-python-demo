@@ -16,10 +16,8 @@ git clone https://github.com/stxapp/stx-python-demo.git
 cd stx-python-demo
 python3 -m venv .venv
 source .venv/bin/activate
-pip install --pre -r requirements.txt
+pip install -r requirements.txt
 ```
-
-`requirements.txt` pins `stx-python==0.6.0rc1`, a release candidate, which is why the install uses `--pre`.
 
 Give the scripts your API key in one of two ways. [Authentication](https://docs.stxapp.io/sdks/python/authentication/) covers both in full.
 

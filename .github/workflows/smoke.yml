@@ -77,7 +77,7 @@ jobs:
         if: steps.gate.outputs.skip != 'true'
         run: |
           python -m pip install --upgrade pip
-          pip install --pre -r requirements.txt
+          pip install -r requirements.txt
           python -c "import stx; print('stx-python', stx.__version__)"
 
       - name: python examples/markets.py
