@@ -8,18 +8,27 @@ from stx.models import Market
 
 
 def best_bid(market: Market) -> str:
-    """The best bid price as a string, or "-" when nobody is bidding."""
+    """The best (highest) bid price as a string, or "-" when nobody is bidding."""
+    # bids and offers both run from the highest price to the lowest.
     return market.bids[0].price if market.bids else "-"
 
 
 def best_offer(market: Market) -> str:
-    """The best offer price as a string, or "-" when nobody is offering."""
-    return market.offers[0].price if market.offers else "-"
+    """The best (lowest) offer price as a string, or "-" when nobody is offering."""
+    return market.offers[-1].price if market.offers else "-"
+
+
+def market_name(market: Market) -> str:
+    """The event and the market's question, e.g. "Away at Home: Will Home win?".
+
+    Markets on one event can share a title (both sides of a game do), so the question tells them apart.
+    """
+    return f"{market.event_title}: {market.question or market.title}"
 
 
 def describe_market(market: Market) -> str:
-    """A one-line description of a market: event, market title, best bid and offer."""
-    return f"{market.event_title}: {market.title}  bid {best_bid(market)}  offer {best_offer(market)}"
+    """A one-line description of a market: its name, best bid and best offer."""
+    return f"{market_name(market)}  bid {best_bid(market)}  offer {best_offer(market)}"
 
 
 def resting_buy_price(max_price: str) -> str:
@@ -42,7 +51,7 @@ def would_rest(market: Market, price: str) -> bool:
     nobody is offering, or the best offer is above `price`."""
     if not market.offers:
         return True
-    return Decimal(market.offers[0].price) > Decimal(price)
+    return Decimal(best_offer(market)) > Decimal(price)
 
 
 def find_resting_buy(client: STX, sport: Optional[str] = None, scan: int = 200) -> Optional[tuple[Market, str]]:

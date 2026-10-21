@@ -15,7 +15,7 @@ from decimal import Decimal
 
 from stx import STX, AsyncSTX, ChannelMessage
 
-from helpers import find_resting_buy
+from helpers import find_resting_buy, market_name
 
 seconds = float(sys.argv[1]) if len(sys.argv) > 1 else 30
 
@@ -28,15 +28,21 @@ if found is None:
 market, _ = found
 
 
-def top(levels) -> str:
-    """The best level of one side of a book as "quantity @ price", or "-"."""
-    return f"{levels[0]['quantity']} @ {levels[0]['price']}" if levels else "-"
+def top(levels, best=max) -> str:
+    """The best level of one side of a book as "quantity @ price", or "-".
+
+    The best bid is the highest price and the best offer the lowest: pass best=min for offers.
+    """
+    if not levels:
+        return "-"
+    level = best(levels, key=lambda lv: Decimal(lv["price"]))
+    return f"{level['quantity']} @ {level['price']}"
 
 
 def on_book(msg: ChannelMessage) -> None:
     # Each "book" push is the market's whole book: replace what you hold, do not merge.
     if msg.event == "book":
-        print(f"[book]    best bid {top(msg.payload['bids'])}  best offer {top(msg.payload['offers'])}")
+        print(f"[book]    best bid {top(msg.payload['bids'])}  best offer {top(msg.payload['offers'], min)}")
 
 
 def on_account(msg: ChannelMessage) -> None:
@@ -57,10 +63,10 @@ def on_account(msg: ChannelMessage) -> None:
 
 
 async def main() -> None:
-    print(f"Watching {market.event_title}: {market.title}")
+    print(f"Watching {market_name(market)}")
     bids = [level.model_dump() for level in market.bids or []]
     offers = [level.model_dump() for level in market.offers or []]
-    print(f"[book]    best bid {top(bids)}  best offer {top(offers)}  (starting snapshot)")
+    print(f"[book]    best bid {top(bids)}  best offer {top(offers, min)}  (starting snapshot)")
 
     async with AsyncSTX() as client:
         # One signed socket carries every channel. The client sends heartbeats and reconnects for you.
