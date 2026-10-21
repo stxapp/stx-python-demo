@@ -1,9 +1,15 @@
 """Small helpers shared by the examples. Nothing here talks to the network on its own."""
 
+import asyncio
+import re
+import time
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from decimal import ROUND_FLOOR, Decimal
-from typing import Optional
+from typing import Any, Callable, Optional
 
-from stx import STX
+from stx import STX, AsyncSTX, STXComboException, STXComboPriceMovedException
+from stx.combos import BestQuote, CashOut, ComboPlacement
 from stx.models import Market
 
 
@@ -73,3 +79,132 @@ def find_resting_buy(client: STX, sport: Optional[str] = None, scan: int = 200) 
         if would_rest(market, price):
             return market, price
     return None
+
+
+def combo_stake(value: str) -> str:
+    """A combo stake as a dollar string with two decimals, e.g. "2" becomes "2.00".
+
+    The exchange takes whole cents and nothing below one cent.
+    """
+    if not re.fullmatch(r"\d+(\.\d{1,2})?", value.strip()):
+        raise ValueError(f'a stake is dollars in whole cents, e.g. "2" or "2.50", not {value!r}')
+    stake = Decimal(value.strip())
+    if stake < Decimal("0.01"):
+        raise ValueError(f"a stake must be at least one cent, not {value!r}")
+    return f"{stake:.2f}"
+
+
+def _starts_after(market: Market, now: datetime) -> bool:
+    if not market.event_start:
+        return True
+    start = datetime.fromisoformat(market.event_start.replace("Z", "+00:00"))
+    return start > now
+
+
+async def pick_combo_legs(
+    client: AsyncSTX,
+    count: int = 2,
+    sport: Optional[str] = None,
+    scan: int = 500,
+    now: Optional[datetime] = None,
+) -> list[Market]:
+    """Up to `count` legs for a combo.
+
+    Open markets accepting orders, whose event is scheduled to start after
+    `now`, each from a different event (two markets of one game can
+    contradict each other), and never a combo itself. Fewer than `count` come
+    back when the first `scan` markets do not have enough.
+    """
+    now = now or datetime.now(timezone.utc)
+    legs: list[Market] = []
+    events: set[str] = set()
+    seen = 0
+    async for market in client.iter_markets(status="open", trading=True, sports=[sport] if sport else None):
+        seen += 1
+        if seen > scan or len(legs) >= count:
+            break
+        if not market.market_id or market.archived or market.event_type == "combo":
+            continue
+        if market.event_status and market.event_status != "scheduled":
+            continue
+        if not _starts_after(market, now):
+            continue
+        event = market.event_id or market.market_id
+        if event in events:
+            continue
+        events.add(event)
+        legs.append(market)
+    return legs
+
+
+@dataclass
+class QuoteOutcome:
+    """How a request ended for take_best_quote().
+
+    `placement` and `amount` are set when a quote was accepted, `reason` when
+    the request closed without a trade, and neither when no quote arrived.
+    """
+
+    placement: Optional[ComboPlacement] = None
+    amount: Optional[str] = None
+    reason: Optional[str] = None
+
+
+async def take_best_quote(
+    rfq: Any,
+    rfq_id: str,
+    timeout: float,
+    on_quote: Optional[Callable[[BestQuote], None]] = None,
+) -> QuoteOutcome:
+    """Wait up to `timeout` seconds for a live quote on `rfq_id` and accept it at its exact amount.
+
+    When the best moves before the accept lands, it takes the new best if one
+    is live, or waits for the next. `on_quote` sees every best quote as it
+    arrives, including the empty one sent when quotes are withdrawn.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        left = deadline - time.monotonic()
+        if left <= 0:
+            return QuoteOutcome()
+        try:
+            msg = await rfq.next(timeout=left)
+        except asyncio.TimeoutError:
+            return QuoteOutcome()
+        data = msg.data
+        if data is None or data.rfq_id != rfq_id:
+            continue
+        if msg.event == "negotiation_closed":
+            return QuoteOutcome(reason=data.reason)
+        if msg.event != "best_quote":
+            continue
+        if on_quote:
+            on_quote(data)
+        best = data
+        while best.quote_id and best.amount and time.monotonic() < deadline:
+            try:
+                placement = await rfq.accept(rfq_id, best.quote_id, best.amount)
+                return QuoteOutcome(placement=placement, amount=best.amount)
+            except STXComboPriceMovedException as exc:
+                # The request stays open: take the live best, or wait for the next quote.
+                best = exc.best_quote
+                if on_quote:
+                    on_quote(best)
+
+
+async def cash_out_when_held(rfq: Any, market_id: str, attempts: int = 15, delay: float = 1.0) -> CashOut:
+    """Open a cash out of everything you hold of the combo `market_id`.
+
+    A fill counts toward your position a moment after it trades, so straight
+    after buying the exchange can answer `nothing_to_sell`: this tries again,
+    up to `attempts` times, `delay` seconds apart.
+    """
+    attempt = 1
+    while True:
+        try:
+            return await rfq.cash_out(market_id)
+        except STXComboException as exc:
+            if exc.reason != "nothing_to_sell" or attempt >= attempts:
+                raise
+        attempt += 1
+        await asyncio.sleep(delay)
