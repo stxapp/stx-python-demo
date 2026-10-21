@@ -25,6 +25,8 @@ from helpers import (  # noqa: E402
     pick_combo_legs,
     resting_buy_price,
     take_best_quote,
+    upcoming,
+    upcoming_markets,
     would_rest,
 )
 
@@ -122,6 +124,46 @@ class FindRestingBuy(unittest.TestCase):
     def test_none_when_nothing_fits(self):
         self.assertIsNone(find_resting_buy(FakeClient([market(event_status="live")])))
 
+    def test_skips_a_scheduled_event_whose_start_has_passed(self):
+        stale = market(market_id="stale", event_start=PAST)
+        good = market(market_id="good", event_start=FUTURE)
+        found = find_resting_buy(FakeClient([stale, good]), now=NOW)
+        self.assertEqual(found[0].market_id, "good")
+
+
+PAST = "2026-10-20T00:00:00.000000Z"
+FUTURE = "2026-10-22T23:00:00.000000Z"
+NOW = datetime(2026, 10, 21, tzinfo=timezone.utc)
+
+
+class Upcoming(unittest.TestCase):
+    def test_scheduled_event_in_the_future(self):
+        self.assertTrue(upcoming(market(event_start=FUTURE), NOW))
+
+    def test_scheduled_event_whose_start_has_passed(self):
+        self.assertFalse(upcoming(market(event_start=PAST), NOW))
+
+    def test_started_event(self):
+        self.assertFalse(upcoming(market(event_start=FUTURE, event_status="in_progress"), NOW))
+
+    def test_no_start_time(self):
+        self.assertTrue(upcoming(market(), NOW))
+
+    def test_first_upcoming_markets_only(self):
+        markets = [
+            market(market_id="stale1", event_start=PAST),
+            market(market_id="a", event_start=FUTURE),
+            market(market_id="stale2", event_start=PAST),
+            market(market_id="b", event_start=FUTURE),
+            market(market_id="c", event_start=FUTURE),
+        ]
+        shown = upcoming_markets(markets, count=2, now=NOW)
+        self.assertEqual([m.market_id for m in shown], ["a", "b"])
+
+    def test_scan_limit(self):
+        markets = [market(market_id="stale", event_start=PAST), market(market_id="a", event_start=FUTURE)]
+        self.assertEqual(upcoming_markets(markets, count=5, scan=1, now=NOW), [])
+
 
 class ComboStake(unittest.TestCase):
     def test_two_decimals(self):
@@ -152,8 +194,8 @@ class FakeAsyncClient:
 
 
 class PickComboLegs(unittest.TestCase):
-    FUTURE = "2026-10-22T23:00:00.000000Z"
-    NOW = datetime(2026, 10, 21, tzinfo=timezone.utc)
+    FUTURE = FUTURE
+    NOW = NOW
 
     def leg(self, market_id, event_id, **fields):
         return market(**{"market_id": market_id, "event_id": event_id, "event_start": self.FUTURE, **fields})
