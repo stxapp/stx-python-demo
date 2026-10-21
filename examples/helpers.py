@@ -159,7 +159,8 @@ async def take_best_quote(
     """Wait up to `timeout` seconds for a live quote on `rfq_id` and accept it at its exact amount.
 
     When the best moves before the accept lands, it takes the new best if one
-    is live, or waits for the next. `on_quote` sees every best quote as it
+    is live, or waits for the next. Any other refusal of the accept comes back
+    as `reason`, the exchange's reason. `on_quote` sees every best quote as it
     arrives, including the empty one sent when quotes are withdrawn.
     """
     deadline = time.monotonic() + timeout
@@ -190,6 +191,9 @@ async def take_best_quote(
                 best = exc.best_quote
                 if on_quote:
                     on_quote(best)
+            except STXComboException as exc:
+                # Any other refusal, e.g. player_refused:nothing_to_sell when the holding changed under a cash out.
+                return QuoteOutcome(reason=f"{exc.reason} ({exc.detail})" if exc.detail else exc.reason)
 
 
 async def cash_out_when_held(rfq: Any, market_id: str, attempts: int = 15, delay: float = 1.0) -> CashOut:
