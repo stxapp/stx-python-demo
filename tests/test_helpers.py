@@ -3,20 +3,28 @@
 Run: python -m unittest discover tests
 """
 
+import asyncio
 import sys
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "examples"))
 
+from stx import ChannelMessage, STXComboException, STXComboPriceMovedException  # noqa: E402
+from stx.combos import BestQuote, CashOut, ComboPlacement, NegotiationClosed  # noqa: E402
 from stx.models import Market  # noqa: E402
 
 from helpers import (  # noqa: E402
     best_offer,
+    cash_out_when_held,
+    combo_stake,
     describe_market,
     find_resting_buy,
     market_name,
+    pick_combo_legs,
     resting_buy_price,
+    take_best_quote,
     would_rest,
 )
 
@@ -113,6 +121,163 @@ class FindRestingBuy(unittest.TestCase):
 
     def test_none_when_nothing_fits(self):
         self.assertIsNone(find_resting_buy(FakeClient([market(event_status="live")])))
+
+
+class ComboStake(unittest.TestCase):
+    def test_two_decimals(self):
+        self.assertEqual(combo_stake("2"), "2.00")
+        self.assertEqual(combo_stake("2.5"), "2.50")
+        self.assertEqual(combo_stake(" 5.25 "), "5.25")
+
+    def test_refuses_what_the_exchange_would(self):
+        for bad in ("0", "5.001", "-1", "five", "1e3"):
+            with self.assertRaises(ValueError, msg=bad):
+                combo_stake(bad)
+
+
+class FakeAsyncClient:
+    """Stands in for AsyncSTX: iter_markets() yields the markets it was given."""
+
+    def __init__(self, markets):
+        self.markets = markets
+        self.calls = []
+
+    async def _iter(self):
+        for m in self.markets:
+            yield m
+
+    def iter_markets(self, **query):
+        self.calls.append(query)
+        return self._iter()
+
+
+class PickComboLegs(unittest.TestCase):
+    FUTURE = "2026-10-22T23:00:00.000000Z"
+    NOW = datetime(2026, 10, 21, tzinfo=timezone.utc)
+
+    def leg(self, market_id, event_id, **fields):
+        return market(**{"market_id": market_id, "event_id": event_id, "event_start": self.FUTURE, **fields})
+
+    def test_one_open_future_non_combo_market_per_event(self):
+        client = FakeAsyncClient(
+            [
+                self.leg("a1", "e1"),
+                self.leg("a2", "e1"),  # same event as a1
+                self.leg("old", "e2", event_start="2026-10-19T00:00:00Z"),  # already started
+                self.leg("live", "e3", event_status="in_progress"),
+                self.leg("combo", "e4", event_type="combo"),
+                self.leg("gone", "e5", archived=True),
+                self.leg("b1", "e6"),
+                self.leg("c1", "e7"),
+            ]
+        )
+        legs = asyncio.run(pick_combo_legs(client, count=2, sport="Football", now=self.NOW))
+        self.assertEqual([m.market_id for m in legs], ["a1", "b1"])
+        self.assertEqual(client.calls[0], {"status": "open", "trading": True, "sports": ["Football"]})
+
+    def test_fewer_than_asked_when_the_scan_runs_out(self):
+        client = FakeAsyncClient([self.leg("a1", "e1"), self.leg("b1", "e2")])
+        legs = asyncio.run(pick_combo_legs(client, count=3, now=self.NOW))
+        self.assertEqual([m.market_id for m in legs], ["a1", "b1"])
+
+
+def push(event, data):
+    return ChannelMessage(topic="rfq:u1", event=event, payload=data.model_dump(), data=data)
+
+
+def best(rfq_id, quote_id, amount):
+    return push("best_quote", BestQuote(rfq_id=rfq_id, quote_id=quote_id, amount=amount))
+
+
+PLACEMENT = ComboPlacement(rfq_id="r1", market_id="combo-1", order_id="o1", quantity="7.00", price="0.2858")
+
+
+class FakeRfq:
+    """Stands in for RfqChannel: next() hands out `messages` in order, then times out."""
+
+    def __init__(self, messages, accept=None):
+        self.messages = list(messages)
+        self.accepted = []
+        self._accept = accept or (lambda *args: PLACEMENT)
+
+    async def next(self, timeout=None):
+        if not self.messages:
+            raise asyncio.TimeoutError
+        return self.messages.pop(0)
+
+    async def accept(self, rfq_id, quote_id, amount):
+        self.accepted.append((rfq_id, quote_id, amount))
+        return self._accept(rfq_id, quote_id, amount)
+
+
+class TakeBestQuote(unittest.TestCase):
+    def test_accepts_the_first_live_quote_at_its_exact_amount(self):
+        seen = []
+        rfq = FakeRfq([best("other", "q0", "9.0000"), best("r1", None, None), best("r1", "q1", "5.0000")])
+        outcome = asyncio.run(take_best_quote(rfq, "r1", 1, lambda q: seen.append(q.amount)))
+        self.assertIs(outcome.placement, PLACEMENT)
+        self.assertEqual(outcome.amount, "5.0000")
+        self.assertEqual(rfq.accepted, [("r1", "q1", "5.0000")])  # another request's quote is ignored
+        self.assertEqual(seen, [None, "5.0000"])
+
+    def test_takes_the_live_best_when_the_price_moved(self):
+        calls = []
+
+        def accept(rfq_id, quote_id, amount):
+            calls.append(quote_id)
+            if len(calls) == 1:
+                moved = BestQuote(quote_id="q2", amount="4.8000")
+                raise STXComboPriceMovedException("accept", reply={"reason": "price_moved"}, best_quote=moved)
+            return PLACEMENT
+
+        rfq = FakeRfq([best("r1", "q1", "5.0000")], accept)
+        outcome = asyncio.run(take_best_quote(rfq, "r1", 1))
+        self.assertIs(outcome.placement, PLACEMENT)
+        self.assertEqual(rfq.accepted, [("r1", "q1", "5.0000"), ("r1", "q2", "4.8000")])
+
+    def test_no_quote(self):
+        outcome = asyncio.run(take_best_quote(FakeRfq([]), "r1", 1))
+        self.assertIsNone(outcome.placement)
+        self.assertIsNone(outcome.reason)
+
+    def test_request_closed(self):
+        closed = push("negotiation_closed", NegotiationClosed(rfq_id="r1", reason="expired"))
+        outcome = asyncio.run(take_best_quote(FakeRfq([closed]), "r1", 1))
+        self.assertIsNone(outcome.placement)
+        self.assertEqual(outcome.reason, "expired")
+
+
+class FakeCashOut:
+    def __init__(self, refusals, reason="nothing_to_sell"):
+        self.refusals = refusals
+        self.reason = reason
+        self.calls = 0
+
+    async def cash_out(self, market_id):
+        self.calls += 1
+        if self.calls <= self.refusals:
+            raise STXComboException("cash_out", reply={"reason": self.reason})
+        return CashOut(rfq_id="r2", market_id=market_id, quantity="7.00")
+
+
+class CashOutWhenHeld(unittest.TestCase):
+    def test_retries_nothing_to_sell(self):
+        rfq = FakeCashOut(refusals=2)
+        out = asyncio.run(cash_out_when_held(rfq, "combo-1", delay=0))
+        self.assertEqual(out.quantity, "7.00")
+        self.assertEqual(rfq.calls, 3)
+
+    def test_gives_up_after_its_attempts(self):
+        rfq = FakeCashOut(refusals=99)
+        with self.assertRaises(STXComboException):
+            asyncio.run(cash_out_when_held(rfq, "combo-1", attempts=2, delay=0))
+        self.assertEqual(rfq.calls, 2)
+
+    def test_other_refusals_are_not_retried(self):
+        rfq = FakeCashOut(refusals=1, reason="market_not_quotable")
+        with self.assertRaises(STXComboException):
+            asyncio.run(cash_out_when_held(rfq, "combo-1", delay=0))
+        self.assertEqual(rfq.calls, 1)
 
 
 if __name__ == "__main__":

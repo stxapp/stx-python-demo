@@ -2,7 +2,7 @@
 
 [![Smoke](https://github.com/stxapp/stx-python-demo/actions/workflows/smoke.yml/badge.svg)](https://github.com/stxapp/stx-python-demo/actions/workflows/smoke.yml) [![CI](https://github.com/stxapp/stx-python-demo/actions/workflows/ci.yml/badge.svg)](https://github.com/stxapp/stx-python-demo/actions/workflows/ci.yml)
 
-Small, commented scripts that list markets, place and cancel an order, stream live prices and your account, and read your portfolio on the [STX](https://stxapp.io) exchange, using the [`stx-python`](https://pypi.org/project/stx-python/) SDK.
+Small, commented scripts that list markets, place and cancel an order, stream live prices and your account, buy and cash out a combo, and read your portfolio on the [STX](https://stxapp.io) exchange, using the [`stx-python`](https://pypi.org/project/stx-python/) SDK.
 
 ## Before you start
 
@@ -115,6 +115,32 @@ Closed. Open orders now: 0
 
 The client signs the connection, sends heartbeats and reconnects for you. The WebSocket client is asyncio, so this script uses `AsyncSTX`; the others use the blocking `STX`. The channels and their payloads are described under [WebSockets](https://docs.stxapp.io/sdks/python/websockets/).
 
+### Buy and cash out a combo
+
+`python examples/combos.py` buys a small combo as a player and then cashes it out, so the run ends holding nothing. Code: [`examples/combos.py`](examples/combos.py). Combos run on the US demo exchange (`region = us`, `env = demo`); on any other exchange the script says so and exits.
+
+A combo is one market over two or more legs, and it pays only if every leg wins. The script picks two open markets from different events that have not started, asks makers to quote on a stake of `2.00`, prints each quote as it arrives (what you would win on that stake), and accepts the best one at its exact amount. The exchange then places your order on the combo's own market. The script cashes out the same way: it asks makers what they pay for everything you hold, accepts the best quote, and checks your position is back to zero.
+
+It waits up to 20 seconds for each quote and says so if none arrives; `python examples/combos.py 60` waits up to 60. Set the stake and number of legs with `STAKE=5 LEGS=3 python examples/combos.py`, and look only at one sport with `SPORT=Football python examples/combos.py`; the run below used `SPORT=Football`.
+
+```text
+Leg 1:   Will the Sam Houston Bearkats defeat the New Mexico State Aggies?  (NMSU @ SHSU)
+Leg 2:   Will the App State Mountaineers defeat the James Madison Dukes?  (JMU @ APP)
+
+Request: 6fb0aceb-dde1-4f30-9b67-06442349cb18  stake 2.00
+Waiting up to 20 s for a quote...
+[quote]  win 3.0000 on a 2.00 stake  (quote 76242ebd-1f1f-4fbe-b4e3-cb4e6abe9842)
+Bought:  5.00 @ 0.4000  order 415741fe-4b20-4632-a5c3-b3c571a8e092  (accepted win 3.0000)
+         combo d9295f11-1cc5-494f-8851-1f0fd06ce572  Won / Won  (a winning contract pays 1.0000)
+
+Cash out: 2f439ebc-616a-438d-aabb-bb57e59a531a  selling 5.00
+[quote]  pays 1.7500 for all 5.00  (quote f18ce8e9-1dda-48ec-b715-49a63b64cea6)
+Sold:    5.00 @ 0.3500  order 7c90f4c1-f3db-4f1f-8b70-a08d0046d0b7  (accepted 1.7500)
+Final:   position 0.00 on the combo  open orders 0
+```
+
+Quotes are amounts, not prices: the exchange derives the price and size of your order from your stake and the amount you accept. Above, a `2.00` stake against a `3.00` win prices at 2 / (2 + 3) = `0.4000`, for 5 contracts that pay `5.00` if both legs win. The cash out sold all 5 for the `1.75` the maker quoted. Like `examples/live.py`, this script uses `AsyncSTX`, because the WebSocket client is asyncio. [Combos](https://docs.stxapp.io/sdks/python/combos/) walks through every call, including the maker side, and [Combo negotiation](https://docs.stxapp.io/websockets/channels/combo-negotiation/) documents the protocol.
+
 ### Read your portfolio
 
 `python examples/portfolio.py` prints your key's scope, balance, open positions, open orders and recent fills. Code: [`examples/portfolio.py`](examples/portfolio.py).
@@ -146,7 +172,7 @@ python -m unittest discover tests
 
 The tests cover the helpers in [`examples/helpers.py`](examples/helpers.py) with a stand-in client, so they need no API key and make no network calls.
 
-The [Smoke](.github/workflows/smoke.yml) workflow also runs every example against the US and Ontario demo exchanges on each pull request, each push to `main` and once a day.
+The [Smoke](.github/workflows/smoke.yml) workflow also runs every example against the US and Ontario demo exchanges (combos on US demo only) on each pull request, each push to `main` and once a day.
 
 ## Documentation
 
