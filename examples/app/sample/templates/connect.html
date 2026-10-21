@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Connect your STX account</h1>
+<p>You are signed in to this app, but your STX account is not connected{% if mode == "stx" %} any more{% endif %}.</p>
+<p>STX asks you to sign in and to allow this app to read your balance, portfolio and orders and to place orders for you. You can disconnect at any time, here or in STX.</p>
+<p><a class="button" href="{{ connect_url }}">Connect your STX account</a></p>
+{% endblock %}

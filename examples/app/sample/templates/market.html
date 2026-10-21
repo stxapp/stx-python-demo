@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ market.event_title }}</h1>
+<p>{{ market.title }}<br><span class="muted">{{ market.symbol }} · a winning contract pays {{ market.max_price }}</span></p>
+
+<section id="live-market" data-market-id="{{ market.market_id }}" data-sport="{{ market.sport or '' }}">
+  <h2>Order book <span class="status" id="market-status">connecting…</span></h2>
+  <div class="book">
+    <table><thead><tr><th>Bid</th><th>Qty</th></tr></thead><tbody id="bids">
+      {% for lv in (market.bids or [])[:5] %}<tr><td>{{ lv.price }}</td><td>{{ lv.quantity }}</td></tr>{% endfor %}
+    </tbody></table>
+    <table><thead><tr><th>Offer</th><th>Qty</th></tr></thead><tbody id="offers">
+      {% for lv in (market.offers or [])[:5] %}<tr><td>{{ lv.price }}</td><td>{{ lv.quantity }}</td></tr>{% endfor %}
+    </tbody></table>
+  </div>
+  <p>Ticker: <span id="ticker">last {{ market.last_traded_price or "-" }}</span></p>
+</section>
+
+<h2>Place an order</h2>
+{% if connected %}
+<form method="post" action="/orders" class="stack">
+  <input type="hidden" name="market_id" value="{{ market.market_id }}">
+  <label>Side <select name="action"><option value="buy">Buy</option><option value="sell">Sell</option></select></label>
+  <label>Price <input name="price" required inputmode="decimal" placeholder="0.01"></label>
+  <label>Contracts <input name="quantity" required inputmode="decimal" value="1"></label>
+  <button>Place limit order</button>
+</form>
+{% elif user %}
+<p><a class="button" href="{{ connect_url }}">Connect your STX account</a> to trade.</p>
+{% else %}
+<p><a class="button" href="/login">{% if mode == "stx" %}Sign in with your STX account{% else %}Sign in{% endif %}</a> to trade.</p>
+{% endif %}
+{% endblock %}
+{% block scripts %}<script src="/static/live.js"></script>{% endblock %}

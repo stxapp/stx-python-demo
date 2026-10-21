@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Build on STX in Python</h1>
+<p>This sample app shows the whole flow of an STX app with the <code>stx-python</code> SDK.</p>
+<ul>
+  <li><a href="/markets">Markets</a>: the market list and a live order book, read with the app's own token. No sign-in needed.</li>
+  {% if mode == "stx" %}
+  <li><strong>Sign in with your STX account</strong>: one step signs you in here and connects your STX account.</li>
+  {% else %}
+  <li><strong>Sign in</strong> to this app with its own login, then <strong>connect your STX account</strong>.</li>
+  {% endif %}
+  <li><a href="/dashboard">Dashboard</a>: your STX balance, positions, open orders, fills and settlements, updated live. Place and cancel orders.</li>
+</ul>
+{% if not user %}
+  {% if mode == "stx" %}
+    <p><a class="button" href="/login">Sign in with your STX account</a></p>
+  {% else %}
+    <p><a class="button" href="/login">Sign in</a></p>
+  {% endif %}
+{% elif not connected %}
+  <p><a class="button" href="{{ connect_url }}">Connect your STX account</a></p>
+{% else %}
+  <p><a class="button" href="/dashboard">Open your dashboard</a></p>
+{% endif %}
+{% endblock %}

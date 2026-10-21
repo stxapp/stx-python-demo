@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Markets</h1>
+<p class="muted">Open markets, read with the app's own token (<code>app_client("market_data")</code>). No member is involved.</p>
+<table>
+  <thead><tr><th>Market</th><th>Sport</th><th>Best bid</th><th>Best offer</th><th>Last</th></tr></thead>
+  <tbody>
+  {% for m in markets %}
+    <tr>
+      <td><a href="/markets/{{ m.market_id }}">{{ m.event_short_title or m.event_title }}</a><br><span class="muted">{{ m.title }}</span></td>
+      <td>{{ m.sport }}</td>
+      <td>{{ m.bids[0].price if m.bids else "-" }}</td>
+      <td>{{ m.offers[0].price if m.offers else "-" }}</td>
+      <td>{{ m.last_traded_price or "-" }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="5">No open markets right now.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,135 @@
+name: App
+
+# Boots the sample app in examples/app against the US demo exchange and calls
+# its routes, with stx-python from PyPI as pinned in examples/app/requirements.txt.
+#
+# boot: both login modes, no secrets. The app reads the exchange's public
+#   discovery documents at startup; the job checks /healthz, the home page and
+#   that signing in sends the browser to STX with PKCE (and a nonce in stx mode).
+# live: the market list and the live order book, read with the app's own token
+#   (client_credentials, market_data). Needs these repository secrets, an OAuth
+#   client on US demo: STX_OAUTH_CLIENT_ID_US_DEMO, STX_OAUTH_CLIENT_SECRET_US_DEMO.
+#   Pull requests from forks get no secrets, so the job is skipped for them.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "41 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  boot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [stx, own]
+    name: boot (LOGIN_MODE=${{ matrix.mode }})
+    defaults:
+      run:
+        working-directory: examples/app
+    env:
+      LOGIN_MODE: ${{ matrix.mode }}
+      STX_REGION: us
+      STX_ENV: demo
+      STX_OAUTH_CLIENT_ID: stxapp_client_ci_boot_check
+      STX_OAUTH_CLIENT_SECRET: not-a-secret
+      STX_OAUTH_REDIRECT_URI: http://localhost:8765/callback
+      SESSION_SECRET: ci-only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Start the app
+        run: |
+          uvicorn sample.main:create_app --factory --port 8765 > app.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf localhost:8765/healthz && break; sleep 1; done
+      - name: Health
+        run: |
+          curl -sf localhost:8765/healthz | tee health.json
+          grep -q '"oauth":true' health.json || { echo "::error::the app did not find OAuth on US demo"; exit 1; }
+          grep -q "\"login_mode\":\"$LOGIN_MODE\"" health.json
+      - name: Home page
+        run: curl -sf localhost:8765/ | grep -q "STX sample app"
+      - name: Signing in goes to STX
+        run: |
+          if [ "$LOGIN_MODE" = own ]; then
+            curl -sf -c jar -o /dev/null -d name=ci localhost:8765/login
+            path=/connect
+          else
+            path=/login
+          fi
+          location=$(curl -s -b jar -o /dev/null -w '%{redirect_url}' localhost:8765$path)
+          echo "$location" | sed -E 's/(state|code_challenge|nonce)=[^&]+/\1=.../g'
+          case "$location" in https://demo.stxapp.io/oauth/authorize\?*code_challenge_method=S256*) ;; *) echo "::error::$path did not redirect to the STX authorize endpoint"; exit 1 ;; esac
+          if [ "$LOGIN_MODE" = stx ]; then
+            echo "$location" | grep -q 'scope=openid' || { echo "::error::Sign in with STX did not ask for openid"; exit 1; }
+            echo "$location" | grep -q 'nonce=' || { echo "::error::Sign in with STX sent no nonce"; exit 1; }
+          fi
+      - name: App log
+        if: always()
+        run: cat app.log
+
+  live:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: examples/app
+    env:
+      LOGIN_MODE: stx
+      STX_REGION: us
+      STX_ENV: demo
+      STX_OAUTH_CLIENT_ID: ${{ secrets.STX_OAUTH_CLIENT_ID_US_DEMO }}
+      STX_OAUTH_CLIENT_SECRET: ${{ secrets.STX_OAUTH_CLIENT_SECRET_US_DEMO }}
+      STX_OAUTH_REDIRECT_URI: http://localhost:8765/callback
+      SESSION_SECRET: ci-only
+    steps:
+      - name: OAuth client
+        run: |
+          if [ -z "$STX_OAUTH_CLIENT_ID" ] || [ -z "$STX_OAUTH_CLIENT_SECRET" ]; then
+            echo "::error::Secrets STX_OAUTH_CLIENT_ID_US_DEMO and STX_OAUTH_CLIENT_SECRET_US_DEMO must be set."
+            exit 1
+          fi
+        working-directory: .
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Start the app
+        run: |
+          uvicorn sample.main:create_app --factory --port 8765 > app.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf localhost:8765/healthz && break; sleep 1; done
+      - name: Market list on the app token
+        run: |
+          curl -sf localhost:8765/markets -o markets.html
+          count=$(grep -o 'href="/markets/[^"]*"' markets.html | sort -u | wc -l)
+          echo "markets listed: $count"
+          [ "$count" -gt 0 ] || { echo "::error::/markets listed no markets"; exit 1; }
+          grep -o 'href="/markets/[^"]*"' markets.html | head -1 | cut -d/ -f3 | tr -d '"' > market_id
+      - name: Market page and live order book
+        run: |
+          id=$(cat market_id)
+          curl -sf localhost:8765/markets/$id | grep -q 'id="live-market"'
+          (timeout 20 curl -sN "localhost:8765/live/market/$id" || true) > feed.txt
+          head -c 600 feed.txt; echo
+          grep -q '^event: joined' feed.txt || { echo "::error::the live market feed did not join"; exit 1; }
+      - name: App log
+        if: always()
+        run: cat app.log

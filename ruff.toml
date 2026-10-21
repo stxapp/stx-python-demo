@@ -5,4 +5,4 @@ target-version = "py39"
 select = ["E", "F", "W", "I", "B", "UP"]
 
 [lint.isort]
-known-first-party = ["helpers"]
+known-first-party = ["helpers", "sample", "tests"]
