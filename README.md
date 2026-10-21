@@ -49,19 +49,25 @@ Each script is in [`examples/`](examples/) and runs with one command. The sample
 
 ### List markets
 
-`python examples/markets.py` lists markets that are open and accepting orders, with the best bid and offer on each. Code: [`examples/markets.py`](examples/markets.py).
+`python examples/markets.py` lists markets that are open and accepting orders, with the best bid (the highest) and the best offer (the lowest) on each. Code: [`examples/markets.py`](examples/markets.py).
 
 ```text
-New York Yankees at San Diego Padres: Yankees First Run  bid 0.4200  offer -
-New York Yankees at San Diego Padres: Padres First Run  bid -  offer -
-Norfolk State Spartans at Old Dominion Monarchs: Norfolk St Score Last  bid -  offer -
-Norfolk State Spartans at Old Dominion Monarchs: Old Dominion Score Last  bid -  offer -
-Florida International Panthers at Florida Atlantic Owls: First Score a TD  bid -  offer -
+Los Angeles Dodgers at Milwaukee Brewers: Will the Los Angeles Dodgers defeat the Milwaukee Brewers?  bid -  offer -
+Los Angeles Dodgers at Milwaukee Brewers: Will the Milwaukee Brewers defeat the Los Angeles Dodgers?  bid -  offer -
+Los Angeles Dodgers at Milwaukee Brewers: Will the Los Angeles Dodgers defeat the Milwaukee Brewers?  bid -  offer -
+Los Angeles Dodgers at Milwaukee Brewers: Will the Milwaukee Brewers defeat the Los Angeles Dodgers?  bid -  offer -
+Cleveland Guardians at Tampa Bay Rays: Will the Cleveland Guardians defeat the Tampa Bay Rays?  bid -  offer -
 
 5 markets shown, more available.
 ```
 
-Prices are dollars per contract. A bid of `0.4200` on a market whose winning contract pays `1.0000` means a buyer will pay 42 cents for a contract that pays $1 if the Yankees score first. `-` means nobody is bidding or offering. Some markets pay `100.0000` for a winning contract, so their prices read like `42.0000`. Each market's `max_price` says which.
+Each line is the event and the market's question. Prices are dollars per contract: a bid of `0.4200` on a market whose winning contract pays `1.0000` means a buyer will pay 42 cents for a contract that pays $1 if the answer is yes. `-` means nobody is bidding or offering. Some markets pay `100.0000` for a winning contract, so their prices read like `16.0000`, as on this line from the Ontario demo exchange:
+
+```text
+US Confirmation of Aliens in 2027: Will the US confirm that aliens exist before 2027?  bid 16.0000  offer 24.0000
+```
+
+Each market's `max_price` says which.
 
 ### Place and cancel an order
 
@@ -72,11 +78,11 @@ The price is 1% of what a winning contract pays, read from the market's `max_pri
 It uses the first such market it finds. To look only at one sport, set `SPORT`, for example `SPORT=Football python examples/trade.py`. `examples/live.py` reads `SPORT` too, so the two scripts still watch the same market.
 
 ```text
-Market:  Chicago White Sox at Houston Astros: MLB Playoff CHW @ HOU
-         STXMLB-26OCT011700CHWHOU-GAMECHW  (a winning contract pays 1.0000)
-Placed:  buy 1 @ 0.01  id a6907ba5-0dd1-4502-97b8-4a14de297895  status accepted
-Read:    status open  filled 0.00 of 1.00  client id demo-8c629659-2bc8-49c7-b09d-82c634e0bc85
-Cancel:  a6907ba5-0dd1-4502-97b8-4a14de297895  cancelled
+Market:  Los Angeles Dodgers at Milwaukee Brewers: Will the Los Angeles Dodgers defeat the Milwaukee Brewers?
+         STXMLB-26OCT182000LADMIL-GAMELAD  (a winning contract pays 1.0000)
+Placed:  buy 1 @ 0.01  id 08ee5eca-c5e5-404d-b305-0aa034e193d7  status accepted
+Read:    status open  filled 0.00 of 1.00  client id demo-524b760f-eee9-42b6-8ea5-8adda7b45451
+Cancel:  08ee5eca-c5e5-404d-b305-0aa034e193d7  cancelled
 Final:   status cancelled  filled 0.00
 ```
 
@@ -89,9 +95,9 @@ The order carries a `client_order_id`, your own id for it. If a call to place an
 Run `python examples/trade.py` in a second terminal while it streams to see the order arrive on the book and on your account, and leave both when it is cancelled:
 
 ```text
-Watching Chicago White Sox at Houston Astros: MLB Playoff CHW @ HOU
+Watching Los Angeles Dodgers at Milwaukee Brewers: Will the Los Angeles Dodgers defeat the Milwaukee Brewers?
 [book]    best bid -  best offer -  (starting snapshot)
-[account] available 10019999.6400  open orders 0  positions 0
+[account] available 100000.0000  open orders 0  positions 0
 
 Streaming for 20 s. Run examples/trade.py in another terminal to see an order come and go.
 

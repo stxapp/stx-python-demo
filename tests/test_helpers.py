@@ -11,7 +11,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "examples"))
 
 from stx.models import Market  # noqa: E402
 
-from helpers import describe_market, find_resting_buy, resting_buy_price, would_rest  # noqa: E402
+from helpers import (  # noqa: E402
+    best_offer,
+    describe_market,
+    find_resting_buy,
+    market_name,
+    resting_buy_price,
+    would_rest,
+)
 
 
 def market(**fields) -> Market:
@@ -63,6 +70,11 @@ class WouldRest(unittest.TestCase):
     def test_offer_above_price(self):
         self.assertTrue(would_rest(market(offers=[{"price": "0.0200", "quantity": "1"}]), "0.01"))
 
+    def test_lowest_offer_decides(self):
+        # Offers run from the highest price to the lowest; the 0.01 offer would fill a 0.01 buy.
+        offers = [{"price": "0.0500", "quantity": "1"}, {"price": "0.0100", "quantity": "1"}]
+        self.assertFalse(would_rest(market(offers=offers), "0.01"))
+
     def test_offer_at_price_would_trade(self):
         self.assertFalse(would_rest(market(offers=[{"price": "0.0100", "quantity": "1"}]), "0.01"))
 
@@ -71,6 +83,20 @@ class DescribeMarket(unittest.TestCase):
     def test_bid_and_no_offer(self):
         m = market(bids=[{"price": "0.4200", "quantity": "5.00"}])
         self.assertEqual(describe_market(m), "Away at Home: Home wins  bid 0.4200  offer -")
+
+    def test_best_offer_is_the_lowest(self):
+        m = market(
+            bids=[{"price": "0.4200", "quantity": "5.00"}, {"price": "0.4000", "quantity": "2.00"}],
+            offers=[{"price": "0.4800", "quantity": "1.00"}, {"price": "0.4500", "quantity": "3.00"}],
+        )
+        self.assertEqual(best_offer(m), "0.4500")
+        self.assertEqual(describe_market(m), "Away at Home: Home wins  bid 0.4200  offer 0.4500")
+
+    def test_question_tells_markets_apart(self):
+        home = market(title="Away @ Home", question="Will Home defeat Away?")
+        away = market(title="Away @ Home", question="Will Away defeat Home?")
+        self.assertEqual(market_name(home), "Away at Home: Will Home defeat Away?")
+        self.assertNotEqual(market_name(home), market_name(away))
 
 
 class FindRestingBuy(unittest.TestCase):

@@ -14,7 +14,7 @@ import uuid
 
 from stx import STX, STXRejectedException, STXValidationException
 
-from helpers import find_resting_buy
+from helpers import find_resting_buy, market_name
 
 with STX() as client:
     # 1. Find a market that accepts orders, whose event has not started, and a price that will rest.
@@ -23,7 +23,7 @@ with STX() as client:
         print("No open market right now where a small buy would rest. Try again later.")
         sys.exit(0)
     market, price = found
-    print(f"Market:  {market.event_title}: {market.title}")
+    print(f"Market:  {market_name(market)}")
     print(f"         {market.symbol}  (a winning contract pays {market.max_price})")
 
     # 2. Place the order. client_order_id is your own id: use it to find the order
