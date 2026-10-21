@@ -3,6 +3,7 @@
 import asyncio
 import re
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import ROUND_FLOOR, Decimal
@@ -60,9 +61,39 @@ def would_rest(market: Market, price: str) -> bool:
     return Decimal(best_offer(market)) > Decimal(price)
 
 
-def find_resting_buy(client: STX, sport: Optional[str] = None, scan: int = 200) -> Optional[tuple[Market, str]]:
-    """The first open market that is accepting orders, whose event has not
-    started, and where a buy at resting_buy_price() would rest.
+def upcoming(market: Market, now: Optional[datetime] = None) -> bool:
+    """True when the market's event is scheduled and starts after `now` (default: the current time).
+
+    An open market can belong to an event whose start time has passed but that is
+    still marked scheduled. Nobody quotes those, so the examples skip them.
+    A market with no event status or start time counts as upcoming.
+    """
+    if market.event_status and market.event_status != "scheduled":
+        return False
+    if not market.event_start:
+        return True
+    start = datetime.fromisoformat(market.event_start.replace("Z", "+00:00"))
+    return start > (now or datetime.now(timezone.utc))
+
+
+def upcoming_markets(
+    markets: Iterable[Market], count: int, scan: int = 200, now: Optional[datetime] = None
+) -> list[Market]:
+    """The first `count` upcoming markets out of the first `scan` in `markets`."""
+    found: list[Market] = []
+    for seen, market in enumerate(markets, start=1):
+        if seen > scan or len(found) >= count:
+            break
+        if upcoming(market, now):
+            found.append(market)
+    return found
+
+
+def find_resting_buy(
+    client: STX, sport: Optional[str] = None, scan: int = 200, now: Optional[datetime] = None
+) -> Optional[tuple[Market, str]]:
+    """The first open market that is accepting orders, whose event is upcoming
+    (see upcoming()), and where a buy at resting_buy_price() would rest.
 
     Returns the market and that price, or None when none of the first `scan`
     markets fit. Pass `sport` (e.g. "Football") to look only at that sport.
@@ -73,7 +104,7 @@ def find_resting_buy(client: STX, sport: Optional[str] = None, scan: int = 200) 
             break
         if not market.market_id or not market.max_price:
             continue
-        if market.event_status and market.event_status != "scheduled":
+        if not upcoming(market, now):
             continue
         price = resting_buy_price(market.max_price)
         if would_rest(market, price):
@@ -92,13 +123,6 @@ def combo_stake(value: str) -> str:
     if stake < Decimal("0.01"):
         raise ValueError(f"a stake must be at least one cent, not {value!r}")
     return f"{stake:.2f}"
-
-
-def _starts_after(market: Market, now: datetime) -> bool:
-    if not market.event_start:
-        return True
-    start = datetime.fromisoformat(market.event_start.replace("Z", "+00:00"))
-    return start > now
 
 
 async def pick_combo_legs(
@@ -125,9 +149,7 @@ async def pick_combo_legs(
             break
         if not market.market_id or market.archived or market.event_type == "combo":
             continue
-        if market.event_status and market.event_status != "scheduled":
-            continue
-        if not _starts_after(market, now):
+        if not upcoming(market, now):
             continue
         event = market.event_id or market.market_id
         if event in events:

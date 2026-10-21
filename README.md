@@ -49,16 +49,16 @@ Each script is in [`examples/`](examples/) and runs with one command. The sample
 
 ### List markets
 
-`python examples/markets.py` lists markets that are open and accepting orders, with the best bid (the highest) and the best offer (the lowest) on each. Code: [`examples/markets.py`](examples/markets.py).
+`python examples/markets.py` lists the first 5 upcoming markets that are open and accepting orders, with the best bid (the highest) and the best offer (the lowest) on each. Upcoming means the event is scheduled and its start time has not passed: an event can stay open after its start time, and nobody quotes those. Code: [`examples/markets.py`](examples/markets.py).
 
 ```text
-Los Angeles Dodgers at Milwaukee Brewers: Will the Los Angeles Dodgers defeat the Milwaukee Brewers?  bid -  offer -
-Los Angeles Dodgers at Milwaukee Brewers: Will the Milwaukee Brewers defeat the Los Angeles Dodgers?  bid -  offer -
-Los Angeles Dodgers at Milwaukee Brewers: Will the Los Angeles Dodgers defeat the Milwaukee Brewers?  bid -  offer -
-Los Angeles Dodgers at Milwaukee Brewers: Will the Milwaukee Brewers defeat the Los Angeles Dodgers?  bid -  offer -
-Cleveland Guardians at Tampa Bay Rays: Will the Cleveland Guardians defeat the Tampa Bay Rays?  bid -  offer -
+Manchester United at Como: Will the game between the Como and the Manchester United end in a draw in the 1st Half?  bid 0.3100  offer 0.3600
+Galatasaray at Lille: Will the game between the Lille and the Galatasaray end in a draw in the 1st Half?  bid 0.3100  offer 0.3600
+Galatasaray at Lille: Will the Galatasaray win the game between the Lille and the Galatasaray in regulation time?  bid 0.3100  offer 0.3600
+Galatasaray at Lille: Will the Lille win the game between the Lille and the Galatasaray in the 1st Half?  bid 0.3100  offer 0.3600
+Manchester United at Como: Will the game between the Como and the Manchester United end in a draw during regulation?  bid 0.3100  offer 0.3600
 
-5 markets shown, more available.
+5 upcoming markets shown.
 ```
 
 Each line is the event and the market's question. Prices are dollars per contract: a bid of `0.4200` on a market whose winning contract pays `1.0000` means a buyer will pay 42 cents for a contract that pays $1 if the answer is yes. `-` means nobody is bidding or offering. Some markets pay `100.0000` for a winning contract, so their prices read like `16.0000`, as on this line from the Ontario demo exchange:
@@ -73,16 +73,16 @@ Each market's `max_price` says which.
 
 `python examples/trade.py` places one buy order for 1 contract, reads it back, then cancels it. Code: [`examples/trade.py`](examples/trade.py).
 
-The price is 1% of what a winning contract pays, read from the market's `max_price` (one cent on a $1 contract, `1.00` on a $100 one), and the script only picks a market whose event has not started and where nobody is offering at that price or lower. The order rests on the book and does not trade, and the script cancels it before it exits.
+The price is 1% of what a winning contract pays, read from the market's `max_price` (one cent on a $1 contract, `1.00` on a $100 one), and the script only picks an upcoming market (as above) where nobody is offering at that price or lower. The order rests on the book and does not trade, and the script cancels it before it exits.
 
 It uses the first such market it finds. To look only at one sport, set `SPORT`, for example `SPORT=Football python examples/trade.py`. `examples/live.py` reads `SPORT` too, so the two scripts still watch the same market.
 
 ```text
-Market:  Los Angeles Dodgers at Milwaukee Brewers: Will the Los Angeles Dodgers defeat the Milwaukee Brewers?
-         STXMLB-26OCT182000LADMIL-GAMELAD  (a winning contract pays 1.0000)
-Placed:  buy 1 @ 0.01  id 08ee5eca-c5e5-404d-b305-0aa034e193d7  status accepted
-Read:    status open  filled 0.00 of 1.00  client id demo-524b760f-eee9-42b6-8ea5-8adda7b45451
-Cancel:  08ee5eca-c5e5-404d-b305-0aa034e193d7  cancelled
+Market:  Manchester United at Como: Will the game between the Como and the Manchester United end in a draw in the 1st Half?
+         STXUEFA-26OCT211245MANCOMO-R1DRAWMANCOMO  (a winning contract pays 1.0000)
+Placed:  buy 1 @ 0.01  id bed6edd4-ad0a-4aed-bc99-cc945a702ac4  status accepted
+Read:    status open  filled 0.00 of 1.00  client id demo-9cabbbf6-1198-4963-b5cc-a079151b16ea
+Cancel:  bed6edd4-ad0a-4aed-bc99-cc945a702ac4  cancelled
 Final:   status cancelled  filled 0.00
 ```
 
@@ -92,23 +92,24 @@ The order carries a `client_order_id`, your own id for it. If a call to place an
 
 `python examples/live.py` opens one WebSocket, streams the order book of the market `examples/trade.py` uses together with your live account (balance, open orders, fills and positions), and exits after 30 seconds. `python examples/live.py 60` streams for 60; the run below used 20. Code: [`examples/live.py`](examples/live.py).
 
-Run `python examples/trade.py` in a second terminal while it streams to see the order arrive on the book and on your account, and leave both when it is cancelled:
+Run `python examples/trade.py` in a second terminal while it streams to see the order arrive on your account and leave when it is cancelled. The book is pushed again each time, but its best bid does not change: a one-cent bid sits below the best one.
 
 ```text
-Watching Los Angeles Dodgers at Milwaukee Brewers: Will the Los Angeles Dodgers defeat the Milwaukee Brewers?
-[book]    best bid -  best offer -  (starting snapshot)
+Watching Manchester United at Como: Will the game between the Como and the Manchester United end in a draw in the 1st Half?
+[book]    best bid 50.00 @ 0.3100  best offer 50.00 @ 0.3600  (starting snapshot)
+[book]    best bid 50.00 @ 0.3100  best offer 50.00 @ 0.3600
 [account] available 100000.0000  open orders 0  positions 0
 
 Streaming for 20 s. Run examples/trade.py in another terminal to see an order come and go.
 
 [account] positions 1 updated
 [account] order buy 1.00 @ 0.0100  open  filled 0.00
-[book]    best bid 1.00 @ 0.0100  best offer -
+[book]    best bid 50.00 @ 0.3100  best offer 50.00 @ 0.3600
 [account] order buy 1.00 @ 0.0100  cancelled  filled 0.00
 [account] positions 1 updated
 [account] positions 1 updated
 [account] order buy 1.00 @ 0.0100  cancelled  filled 0.00
-[book]    best bid -  best offer -
+[book]    best bid 50.00 @ 0.3100  best offer 50.00 @ 0.3600
 
 Closed. Open orders now: 0
 ```
