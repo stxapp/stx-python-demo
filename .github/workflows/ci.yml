@@ -1,7 +1,7 @@
 name: CI
 
-# Offline checks: lint and the helper tests. No API key, no network calls
-# beyond installing stx-python from PyPI.
+# Offline checks: lint, the helper tests and the sample app's unit tests. No
+# API key, no network calls beyond installing packages from PyPI.
 
 on:
   push:
@@ -30,4 +30,25 @@ jobs:
           pip install "ruff==0.16.9"
       - run: ruff check examples tests
       - run: ruff format --check examples tests
+      - run: python -m unittest discover tests -v
+
+  app:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    defaults:
+      run:
+        working-directory: examples/app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -c "import stx; print('stx-python', stx.__version__)"
       - run: python -m unittest discover tests -v

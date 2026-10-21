@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% macro unavailable(sec) %}{% if sec[1] %}<p class="muted">{{ sec[1] }}</p>{% endif %}{% endmacro %}
+{% block content %}
+<h1>Your STX account</h1>
+
+<section id="live-account">
+  <h2>Balance <span class="status" id="account-status">connecting…</span></h2>
+  {{ unavailable(balance) }}
+  {% if balance[0] %}
+  <p class="big"><span id="available">{{ balance[0].available_balance }}</span> available
+    <span class="muted">of <span id="account-balance">{{ balance[0].account_balance }}</span></span></p>
+  {% endif %}
+  <p class="muted" id="account-change"></p>
+</section>
+
+<section>
+  <h2>Open orders</h2>
+  {{ unavailable(orders) }}
+  <table>
+    <thead><tr><th>Market</th><th>Side</th><th>Price</th><th>Qty</th><th>Filled</th><th>Status</th><th></th></tr></thead>
+    <tbody id="open-orders">
+    {% for o in (orders[0].items if orders[0] else []) %}
+      <tr><td>{{ titles.get(o.market_id, o.market_id) }}</td><td>{{ o.action }}</td><td>{{ o.price }}</td><td>{{ o.quantity }}</td><td>{{ o.filled }}</td><td>{{ o.status }}</td>
+        <td><form method="post" action="/orders/{{ o.id }}/cancel"><button class="small">Cancel</button></form></td></tr>
+    {% else %}
+      <tr><td colspan="7">No open orders. Pick a market on <a href="/markets">Markets</a> to place one.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>Positions</h2>
+  {{ unavailable(positions) }}
+  <table>
+    <thead><tr><th>Market</th><th>Position</th><th>Premium</th><th>Open risk</th></tr></thead>
+    <tbody>
+    {% for p in positions[0] or [] %}
+      <tr><td>{{ titles.get(p.market_id, p.market_id) }}</td><td>{{ p.position }}</td><td>{{ p.premium }}</td><td>{{ p.open_risk }}</td></tr>
+    {% else %}
+      <tr><td colspan="4">No open positions.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>Recent fills</h2>
+  {{ unavailable(fills) }}
+  <table>
+    <thead><tr><th>Time</th><th>Market</th><th>Side</th><th>Price</th><th>Qty</th></tr></thead>
+    <tbody>
+    {% for f in (fills[0].items if fills[0] else []) %}
+      <tr><td>{{ f.time }}</td><td>{{ titles.get(f.market_id, f.market_id) }}</td><td>{{ f.action }}</td><td>{{ f.price }}</td><td>{{ f.filled }}</td></tr>
+    {% else %}
+      <tr><td colspan="5">No fills yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>Settlements</h2>
+  {{ unavailable(settlements) }}
+  <table>
+    <thead><tr><th>Time</th><th>Type</th><th>Qty</th><th>Realized P&amp;L</th></tr></thead>
+    <tbody>
+    {% for s in (settlements[0].items if settlements[0] else []) %}
+      <tr><td>{{ s.time }}</td><td>{{ s.type }}</td><td>{{ s.quantity }}</td><td>{{ s.realized_pnl }}</td></tr>
+    {% else %}
+      <tr><td colspan="4">No settlements yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}
+{% block scripts %}<script id="titles" type="application/json">{{ titles|tojson }}</script>
+<script src="/static/live.js"></script>{% endblock %}

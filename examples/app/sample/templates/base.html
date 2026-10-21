@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}STX sample app{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <a class="brand" href="/">STX sample app</a>
+  <nav>
+    <a href="/markets">Markets</a>
+    {% if user %}
+      <a href="/dashboard">Dashboard</a>
+      <span class="who">{{ user.name }}{% if connected %} · STX connected{% endif %}</span>
+      {% if connected %}
+        <form method="post" action="/unlink"><button class="link">Disconnect STX</button></form>
+      {% endif %}
+      <form method="post" action="/logout"><button class="link">Sign out</button></form>
+    {% elif mode == "stx" %}
+      <a class="button" href="/login">Sign in with your STX account</a>
+    {% else %}
+      <a class="button" href="/login">Sign in</a>
+    {% endif %}
+  </nav>
+</header>
+<main>
+  {% if message %}<p class="message">{{ message }}</p>{% endif %}
+  {% block content %}{% endblock %}
+</main>
+<footer>Exchange: {{ exchange }} · login mode: {{ mode }}</footer>
+{% block scripts %}{% endblock %}
+</body>
+</html>

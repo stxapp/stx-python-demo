@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}{{ page.title }}{% endblock %}
+{% block content %}
+<section class="error" data-code="{{ page.code or '' }}">
+  <h1>{{ page.title }}</h1>
+  <p>{{ page.message }}</p>
+  {% if page.action_url %}<p><a class="button" href="{{ page.action_url }}">{{ page.action_label }}</a></p>{% endif %}
+  {% if page.code %}<p class="muted">Code: <code>{{ page.code }}</code></p>{% endif %}
+</section>
+{% endblock %}

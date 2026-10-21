@@ -8,3 +8,4 @@ __pycache__/
 *.pem
 *.log
 .DS_Store
+*.db

@@ -2,7 +2,7 @@
 
 [![Smoke](https://github.com/stxapp/stx-python-demo/actions/workflows/smoke.yml/badge.svg)](https://github.com/stxapp/stx-python-demo/actions/workflows/smoke.yml) [![CI](https://github.com/stxapp/stx-python-demo/actions/workflows/ci.yml/badge.svg)](https://github.com/stxapp/stx-python-demo/actions/workflows/ci.yml)
 
-Small, commented scripts that list markets, place and cancel an order, stream live prices and your account, buy and cash out a combo, and read your portfolio on the [STX](https://stxapp.io) exchange, using the [`stx-python`](https://pypi.org/project/stx-python/) SDK.
+Small, commented scripts that list markets, place and cancel an order, stream live prices and your account, buy and cash out a combo, and read your portfolio on the [STX](https://stxapp.io) exchange, using the [`stx-python`](https://pypi.org/project/stx-python/) SDK. And a [sample web app](#sample-app) that acts for STX members who sign in with or connect their STX account.
 
 ## Before you start
 
@@ -164,6 +164,10 @@ Recent fills: 5
 ```
 
 `positions()` also returns markets you have traded out of, with a position of `0.00`; the script leaves those out. `examples/live.py` shows the same balance and positions as they change.
+
+## Sample app
+
+[`examples/app/`](examples/app/) is a complete web app, built with FastAPI, for building on STX as an app: members sign in with their STX account (or connect it to your own login), and the app shows their balance, positions, orders, fills and settlements, places and cancels orders for them, streams their account and live order books, and disconnects. It uses OAuth credentials from [STX Apps](https://apps.stxapp.io) rather than an API key. Setup, the two login modes and a map of the code are in its [README](examples/app/README.md).
 
 ## Tests
 
