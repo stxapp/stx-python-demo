@@ -121,25 +121,25 @@ The client signs the connection, sends heartbeats and reconnects for you. The We
 
 A combo is one market over two or more legs, and it pays only if every leg wins. The script picks two open markets from different events that have not started, asks makers to quote on a stake of `2.00`, prints each quote as it arrives (what you would win on that stake), and accepts the best one at its exact amount. The exchange then places your order on the combo's own market. The script cashes out the same way: it asks makers what they pay for everything you hold, accepts the best quote, and checks your position is back to zero.
 
-It waits up to 20 seconds for each quote and says so if none arrives; `python examples/combos.py 60` waits up to 60. Set the stake and number of legs with `STAKE=5 LEGS=3 python examples/combos.py`, and look only at one sport with `SPORT=Football python examples/combos.py`; the run below used `SPORT=Football`.
+It waits up to 20 seconds for each quote and says so if none arrives; `python examples/combos.py 60` waits up to 60. Set the stake and number of legs with `STAKE=5 LEGS=3 python examples/combos.py`, and look only at one sport with `SPORT=Football python examples/combos.py`.
 
 ```text
-Leg 1:   Will the Sam Houston Bearkats defeat the New Mexico State Aggies?  (NMSU @ SHSU)
-Leg 2:   Will the App State Mountaineers defeat the James Madison Dukes?  (JMU @ APP)
+Leg 1:   Will the game between the Como and the Manchester United end in a draw in the 1st Half?  (MAN @ COMO 1H)
+Leg 2:   Will the game between the Lille and the Galatasaray end in a draw in the 1st Half?  (GAL @ LILL 1H)
 
-Request: 6fb0aceb-dde1-4f30-9b67-06442349cb18  stake 2.00
+Request: 517a6b14-422e-4cfa-b867-c4fed69b62ae  stake 2.00
 Waiting up to 20 s for a quote...
-[quote]  win 3.0000 on a 2.00 stake  (quote 76242ebd-1f1f-4fbe-b4e3-cb4e6abe9842)
-Bought:  5.00 @ 0.4000  order 415741fe-4b20-4632-a5c3-b3c571a8e092  (accepted win 3.0000)
-         combo d9295f11-1cc5-494f-8851-1f0fd06ce572  Won / Won  (a winning contract pays 1.0000)
+[quote]  win 15.1400 on a 2.00 stake  (quote e512dbbc-1d61-4424-a26c-5e9046f5a3a1)
+Bought:  17.00 @ 0.1167  order d6bab3fe-cfc1-497d-92a9-3f3089e52cec  (accepted win 15.1400)
+         combo 4582dc69-296c-4ce3-911c-5314b00b93f7  Won / Won  (a winning contract pays 1.0000)
 
-Cash out: 2f439ebc-616a-438d-aabb-bb57e59a531a  selling 5.00
-[quote]  pays 1.7500 for all 5.00  (quote f18ce8e9-1dda-48ec-b715-49a63b64cea6)
-Sold:    5.00 @ 0.3500  order 7c90f4c1-f3db-4f1f-8b70-a08d0046d0b7  (accepted 1.7500)
+Cash out: df15bc40-0189-4fc2-9e18-722cc85865ff  selling 17.00
+[quote]  pays 1.7900 for all 17.00  (quote 6ac317df-5fec-404f-b9b8-9bfa77e72ff0)
+Sold:    17.00 @ 0.1052  order 15abcc18-f13b-4674-b0e7-3816b7c72ab3  (accepted 1.7900)
 Final:   position 0.00 on the combo  open orders 0
 ```
 
-Quotes are amounts, not prices: the exchange derives the price and size of your order from your stake and the amount you accept. Above, a `2.00` stake against a `3.00` win prices at 2 / (2 + 3) = `0.4000`, for 5 contracts that pay `5.00` if both legs win. The cash out sold all 5 for the `1.75` the maker quoted. Like `examples/live.py`, this script uses `AsyncSTX`, because the WebSocket client is asyncio. [Combos](https://docs.stxapp.io/sdks/python/combos/) walks through every call, including the maker side, and [Combo negotiation](https://docs.stxapp.io/websockets/channels/combo-negotiation/) documents the protocol.
+Quotes are amounts, not prices: the exchange derives the price and size of your order from your stake and the amount you accept. Above, a `2.00` stake against a `15.14` win prices at 2 / (2 + 15.14) = 0.11669, rounded up to the combo's tick: `0.1167`. That buys 17 whole contracts, which pay `17.00` if both legs win. The cash out sold all 17 for the `1.79` the maker quoted, at 1.79 / 17 = 0.10529, rounded down: `0.1052`. Like `examples/live.py`, this script uses `AsyncSTX`, because the WebSocket client is asyncio. [Combos](https://docs.stxapp.io/sdks/python/combos/) walks through every call, including the maker side, and [Combo negotiation](https://docs.stxapp.io/websockets/channels/combo-negotiation/) documents the protocol.
 
 ### Read your portfolio
 
