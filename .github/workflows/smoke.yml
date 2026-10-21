@@ -116,6 +116,10 @@ jobs:
 
       - name: python examples/combos.py
         if: steps.gate.outputs.skip != 'true' && matrix.name == 'us-demo'
+        # Football legs: other demo runs may share this account, and a cash out
+        # sells the whole holding of a combo, so this run keeps to its own combo.
+        env:
+          SPORT: Football
         run: |
           set -o pipefail
           python examples/combos.py 30 | tee combos.log

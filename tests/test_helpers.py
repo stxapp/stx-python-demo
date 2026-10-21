@@ -235,6 +235,14 @@ class TakeBestQuote(unittest.TestCase):
         self.assertIs(outcome.placement, PLACEMENT)
         self.assertEqual(rfq.accepted, [("r1", "q1", "5.0000"), ("r1", "q2", "4.8000")])
 
+    def test_refused_accept_is_reported_with_its_reason(self):
+        def accept(*args):
+            raise STXComboException("accept", reply={"reason": "player_refused:nothing_to_sell"})
+
+        outcome = asyncio.run(take_best_quote(FakeRfq([best("r1", "q1", "1.7900")], accept), "r1", 1))
+        self.assertIsNone(outcome.placement)
+        self.assertEqual(outcome.reason, "player_refused (nothing_to_sell)")
+
     def test_no_quote(self):
         outcome = asyncio.run(take_best_quote(FakeRfq([]), "r1", 1))
         self.assertIsNone(outcome.placement)
