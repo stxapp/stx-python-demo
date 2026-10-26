@@ -77,7 +77,7 @@ def upcoming(market: Market, now: Optional[datetime] = None) -> bool:
 
 
 def upcoming_markets(
-    markets: Iterable[Market], count: int, scan: int = 200, now: Optional[datetime] = None
+    markets: Iterable[Market], count: int, scan: int = 1000, now: Optional[datetime] = None
 ) -> list[Market]:
     """The first `count` upcoming markets out of the first `scan` in `markets`."""
     found: list[Market] = []
@@ -90,7 +90,7 @@ def upcoming_markets(
 
 
 def find_resting_buy(
-    client: STX, sport: Optional[str] = None, scan: int = 200, now: Optional[datetime] = None
+    client: STX, sport: Optional[str] = None, scan: int = 1000, now: Optional[datetime] = None
 ) -> Optional[tuple[Market, str]]:
     """The first open market that is accepting orders, whose event is upcoming
     (see upcoming()), and where a buy at resting_buy_price() would rest.
