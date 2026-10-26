@@ -12,7 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "examples"))
 
 from stx import ChannelMessage, STXComboException, STXComboPriceMovedException  # noqa: E402
-from stx.combos import BestQuote, CashOut, ComboPlacement, NegotiationClosed  # noqa: E402
+from stx.combos import BestQuote, CashOut, ComboPlacement, NegotiationClosed, RfqOpened  # noqa: E402
 from stx.models import Market  # noqa: E402
 
 from helpers import (  # noqa: E402
@@ -21,6 +21,7 @@ from helpers import (  # noqa: E402
     combo_stake,
     describe_market,
     find_resting_buy,
+    maker_quote_amount,
     market_name,
     pick_combo_legs,
     resting_buy_price,
@@ -328,6 +329,36 @@ class CashOutWhenHeld(unittest.TestCase):
         with self.assertRaises(STXComboException):
             asyncio.run(cash_out_when_held(rfq, "combo-1", delay=0))
         self.assertEqual(rfq.calls, 1)
+
+
+def opened(**fields) -> RfqOpened:
+    base = {"rfq_id": "r1", "side": "buy", "amount": "2.0000", "max_price": "1.0000", "tick_size": "0.0001000"}
+    base.update(fields)
+    return RfqOpened.model_validate(base)
+
+
+class MakerQuoteAmount(unittest.TestCase):
+    def test_buy_is_the_stake_times_the_multiple(self):
+        self.assertEqual(maker_quote_amount(opened(), "9", "0.08"), "18.00")
+
+    def test_buy_rounds_down_to_whole_cents(self):
+        self.assertEqual(maker_quote_amount(opened(amount="2.5000"), "1.333", "0.08"), "3.33")
+
+    def test_buy_that_buys_no_whole_contract_is_skipped(self):
+        # 0.50 / (0.50 + 0.01) prices at 0.9804: 0.50 buys no whole contract.
+        self.assertIsNone(maker_quote_amount(opened(amount="0.5000"), "0.02", "0.08"))
+
+    def test_zero_multiple_is_skipped(self):
+        self.assertIsNone(maker_quote_amount(opened(), "0", "0.08"))
+
+    def test_cash_out_pays_the_price_for_the_whole_size(self):
+        sell = opened(side="sell", amount=None, quantity="17.00", market_id="c1")
+        self.assertEqual(maker_quote_amount(sell, "9", "0.08"), "1.36")
+
+    def test_cash_out_at_or_above_max_price_is_skipped(self):
+        sell = opened(side="sell", amount=None, quantity="14.00", market_id="c1")
+        self.assertIsNone(maker_quote_amount(sell, "9", "1.50"))
+        self.assertIsNone(maker_quote_amount(sell, "9", "1.00"))
 
 
 if __name__ == "__main__":
