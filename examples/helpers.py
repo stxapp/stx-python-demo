@@ -6,11 +6,11 @@ import time
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from decimal import ROUND_FLOOR, Decimal
+from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
 from typing import Any, Callable, Optional
 
 from stx import STX, AsyncSTX, STXComboException, STXComboPriceMovedException
-from stx.combos import BestQuote, CashOut, ComboPlacement
+from stx.combos import BestQuote, CashOut, ComboPlacement, RfqOpened
 from stx.models import Market
 
 
@@ -77,7 +77,7 @@ def upcoming(market: Market, now: Optional[datetime] = None) -> bool:
 
 
 def upcoming_markets(
-    markets: Iterable[Market], count: int, scan: int = 200, now: Optional[datetime] = None
+    markets: Iterable[Market], count: int, scan: int = 1000, now: Optional[datetime] = None
 ) -> list[Market]:
     """The first `count` upcoming markets out of the first `scan` in `markets`."""
     found: list[Market] = []
@@ -90,7 +90,7 @@ def upcoming_markets(
 
 
 def find_resting_buy(
-    client: STX, sport: Optional[str] = None, scan: int = 200, now: Optional[datetime] = None
+    client: STX, sport: Optional[str] = None, scan: int = 1000, now: Optional[datetime] = None
 ) -> Optional[tuple[Market, str]]:
     """The first open market that is accepting orders, whose event is upcoming
     (see upcoming()), and where a buy at resting_buy_price() would rest.
@@ -234,3 +234,34 @@ async def cash_out_when_held(rfq: Any, market_id: str, attempts: int = 15, delay
                 raise
         attempt += 1
         await asyncio.sleep(delay)
+
+
+def maker_quote_amount(request: RfqOpened, win_multiple: str, cash_out_price: str) -> Optional[str]:
+    """The amount a maker quotes on `request`, in whole cents, or None when it would be refused.
+
+    On a buy the amount is what the player wins: the stake times `win_multiple`.
+    On a cash out it is what you pay for the whole size: `cash_out_price` a
+    contract. The exchange derives a price from the amount, rounded to the
+    request's `tick_size` in your favour, and refuses a quote whose price is
+    not above 0 and below `max_price` (`price_out_of_range`), or, on a buy,
+    whose stake buys no whole contract (`below_one_contract`). This checks the
+    same rules first, so the example does not send a quote it knows will fail.
+    """
+    max_price, tick = Decimal(request.max_price), Decimal(request.tick_size)
+    if request.side == "buy":
+        stake = Decimal(request.amount)
+        amount = (stake * Decimal(win_multiple)).quantize(Decimal("0.01"), rounding=ROUND_FLOOR)
+        if amount <= 0:
+            return None
+        # max_price x stake / (stake + amount), rounded up to the tick.
+        price = (max_price * stake / (stake + amount) / tick).to_integral_value(rounding=ROUND_CEILING) * tick
+        if not 0 < price < max_price or (stake / price).to_integral_value(rounding=ROUND_FLOOR) < 1:
+            return None
+    else:
+        quantity = Decimal(request.quantity)
+        amount = (quantity * Decimal(cash_out_price)).quantize(Decimal("0.01"), rounding=ROUND_FLOOR)
+        # amount / quantity, rounded down to the tick.
+        price = (amount / quantity / tick).to_integral_value(rounding=ROUND_FLOOR) * tick
+        if not 0 < price < max_price:
+            return None
+    return f"{amount:.2f}"

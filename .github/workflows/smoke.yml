@@ -3,9 +3,10 @@ name: Smoke
 # Runs every example against the public demo exchanges, selected with
 # STX_REGION and STX_ENV exactly as a customer would, using stx-python from
 # PyPI as pinned in requirements.txt. The trade example places one 1% buy that
-# rests on the book and cancels it before it exits. The combos example runs on
-# US demo only, the one exchange with combos: it buys a small combo from a
-# maker's quote and cashes it out in the same run.
+# rests on the book and cancels it before it exits. The combos example buys a
+# small combo from a maker's quote and cashes it out in the same run, while the
+# maker example runs beside it: the maker sees that request and is refused a
+# quote on it (cannot_quote_own_request), since both use the same account.
 #
 # Needs these repository secrets (read_write API keys, the PEM as text):
 #   US_DEMO_API_KEY_ID, US_DEMO_API_KEY_PEM            (region us, env demo)
@@ -114,15 +115,22 @@ jobs:
           # A warning, not a failure: other clients may share this account.
           grep -q '^Open orders: 0' portfolio.log || echo "::warning::the account on ${{ matrix.name }} has open orders after the run"
 
-      - name: python examples/combos.py
-        if: steps.gate.outputs.skip != 'true' && matrix.name == 'us-demo'
+      - name: python examples/combos.py, with examples/combo_maker.py beside it
+        if: steps.gate.outputs.skip != 'true'
         # Football legs: other demo runs may share this account, and a cash out
         # sells the whole holding of a combo, so this run keeps to its own combo.
         env:
           SPORT: Football
         run: |
           set -o pipefail
+          PYTHONUNBUFFERED=1 python examples/combo_maker.py 75 > maker.log 2>&1 &
+          maker=$!
+          sleep 5
           python examples/combos.py 30 | tee combos.log
           grep -q '^Bought: ' combos.log || { echo "::error::combos bought nothing on ${{ matrix.name }}"; exit 1; }
           grep -q '^Sold: ' combos.log || { echo "::error::combos did not cash out on ${{ matrix.name }}"; exit 1; }
           grep -q '^Final:   position 0' combos.log || { echo "::error::combos left a position on ${{ matrix.name }}"; exit 1; }
+          wait "$maker" || { cat maker.log; echo "::error::combo_maker exited non-zero on ${{ matrix.name }}"; exit 1; }
+          cat maker.log
+          grep -q '^\[request\] ' maker.log || { echo "::error::combo_maker saw no request on ${{ matrix.name }}"; exit 1; }
+          grep -q 'cannot_quote_own_request' maker.log || { echo "::error::combo_maker did not try to quote the request on ${{ matrix.name }}"; exit 1; }
