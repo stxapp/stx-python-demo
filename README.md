@@ -118,7 +118,7 @@ The client signs the connection, sends heartbeats and reconnects for you. The We
 
 ### Buy and cash out a combo
 
-`python examples/combos.py` buys a small combo as a player and then cashes it out, so the run ends holding nothing. Code: [`examples/combos.py`](examples/combos.py). Combos run on the US demo and Ontario demo exchanges (`env = demo`, with `region = us` or `region = ontario`); on any other exchange the script says so and exits.
+`python examples/combos.py` buys a small combo as a player and then cashes it out, so the run ends holding nothing. Code: [`examples/combos.py`](examples/combos.py). On an exchange without combos, the script says so and exits.
 
 A combo is one market over two or more legs, and it pays only if every leg wins. The script picks two open markets from different events that have not started, asks makers to quote on a stake of `2.00`, prints each quote as it arrives (what you would win on that stake), and accepts the best one at its exact amount. The exchange then places your order on the combo's own market. The script cashes out the same way: it asks makers what they pay for everything you hold, accepts the best quote, and checks your position is back to zero.
 
@@ -144,7 +144,7 @@ Quotes are amounts, not prices: the exchange derives the price and size of your 
 
 ### Quote combos as a maker
 
-`python examples/combo_maker.py` joins as a maker and quotes every combo request on the exchange until you press Ctrl-C, printing how each one ends. Code: [`examples/combo_maker.py`](examples/combo_maker.py). It runs where combos do, on the US demo and Ontario demo exchanges, and needs a `read_write` key.
+`python examples/combo_maker.py` joins as a maker and quotes every combo request on the exchange until you press Ctrl-C, printing how each one ends. Code: [`examples/combo_maker.py`](examples/combo_maker.py). It needs a `read_write` key.
 
 Each request arrives as `rfq_opened`. On a buy you quote what the player wins, the stake times `WIN_MULTIPLE` (default `9`); on a cash out you quote what you pay for everything the player sells, `CASH_OUT_PRICE` a contract (default `0.08`). Each quote stands for `QUOTE_SECONDS` (default `30`). The script checks that the amount prices inside the request's `max_price` and `tick_size` before it sends it, and skips the request if not. `python examples/combo_maker.py 120` stops after 120 seconds instead.
 
@@ -179,7 +179,7 @@ Buys: win 15x the stake. Cash outs: 0.12 a contract. Each quote stands 30 s. Ctr
 [closed]   a55f671b  placed
 ```
 
-A quote can also end `[expired]`, when its `QUOTE_SECONDS` run out and a later quote on the request replaces it, or with the request's own reason, such as `cancelled`. `[closed]` is `rfq_closed`, sent for every request whether you quoted or not. Other makers quote on the demo exchanges too, so expect to lose some requests. A request your own account opened is refused with `cannot_quote_own_request`. Every socket joined as one account gets the pushes about all of that account's quotes, so run one maker per account. Quotes belong to the connection that placed them: on Ctrl-C, or if the connection drops, they are withdrawn. [Quote combos as a maker](https://docs.stxapp.io/websockets/combo-maker/) covers the maker side in every language, and [Combo negotiation](https://docs.stxapp.io/websockets/channels/combo-negotiation/) documents each frame.
+A quote can also end `[expired]`, when its `QUOTE_SECONDS` run out and a later quote on the request replaces it, or with the request's own reason, such as `cancelled`. `[closed]` is `rfq_closed`, sent for every request whether you quoted or not. Other makers quote too, so expect to lose some requests. A request your own account opened is refused with `cannot_quote_own_request`. Every socket joined as one account gets the pushes about all of that account's quotes, so run one maker per account. Quotes belong to the connection that placed them: on Ctrl-C, or if the connection drops, they are withdrawn. [Quote combos as a maker](https://docs.stxapp.io/websockets/combo-maker/) covers the maker side in every language, and [Combo negotiation](https://docs.stxapp.io/websockets/channels/combo-negotiation/) documents each frame.
 
 ### Read your portfolio
 
