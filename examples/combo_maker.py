@@ -7,9 +7,6 @@ happens next: your quote placed (quote_accepted, then placed), another
 maker's placed instead (placed_elsewhere), your quote expiring, and the
 request closing. It needs a read_write API key.
 
-Combos run on the US demo and Ontario demo exchanges (region us or ontario,
-env demo).
-
 On a buy you quote what the player wins: the stake times WIN_MULTIPLE. On a
 cash out you quote what you pay for everything the player sells:
 CASH_OUT_PRICE a contract. Each quote stands for QUOTE_SECONDS.
@@ -71,8 +68,7 @@ async def main() -> int:
             try:
                 quotes = await ws.combo_quote()
             except STXCombosUnavailableException:
-                print(f"Combos are not available on {client.base_url}.", end=" ")
-                print("They run on the US demo and Ontario demo exchanges.")
+                print(f"Combos are not available on {client.base_url}.")
                 return 1
             print(f"Quoting combos on {client.base_url} as a maker.")
             print(f"Buys: win {win_multiple}x the stake. Cash outs: {cash_out_price} a contract.", end=" ")
