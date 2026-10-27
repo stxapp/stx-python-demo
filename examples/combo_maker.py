@@ -9,7 +9,8 @@ request closing. It needs a read_write API key.
 
 On a buy you quote what the player wins: the stake times WIN_MULTIPLE. On a
 cash out you quote what you pay for everything the player sells:
-CASH_OUT_PRICE a contract. Each quote stands for QUOTE_SECONDS.
+CASH_OUT_PRICE a contract. Each quote stands for QUOTE_SECONDS. With PLAYER
+set to a player's external_id, it quotes only that player's requests.
 
 Run: python examples/combo_maker.py              (quote until Ctrl-C)
      python examples/combo_maker.py 120          (stop after 120 s)
@@ -30,6 +31,7 @@ run_seconds = float(sys.argv[1]) if len(sys.argv) > 1 else None
 win_multiple = os.environ.get("WIN_MULTIPLE", "9")
 cash_out_price = os.environ.get("CASH_OUT_PRICE", "0.08")
 quote_ms = int(float(os.environ.get("QUOTE_SECONDS", "30")) * 1000)
+player = os.environ.get("PLAYER")  # a player's external_id: quote only their requests
 
 
 def short(uuid: str) -> str:
@@ -75,6 +77,7 @@ async def main() -> int:
             print(f"Each quote stands {quote_ms // 1000} s. Ctrl-C to stop.\n")
 
             deadline = time.monotonic() + run_seconds if run_seconds else None
+            quoting = set()  # with PLAYER set, the requests this maker takes part in
             while deadline is None or time.monotonic() < deadline:
                 try:
                     msg = await quotes.next(timeout=deadline - time.monotonic() if deadline else None)
@@ -82,6 +85,11 @@ async def main() -> int:
                     break
                 d = msg.data
                 rfq = short(d.rfq_id) if d is not None else "-"
+                if player and msg.event in ("rfq_opened", "rfq_closed"):
+                    if msg.event == "rfq_opened" and d.external_id == player:
+                        quoting.add(d.rfq_id)
+                    if d.rfq_id not in quoting:
+                        continue  # another player's request
                 if msg.event == "rfq_opened":
                     # Every request opened after the join, from every player, your own included.
                     print(f"[request]  {rfq}  {describe(d)}")

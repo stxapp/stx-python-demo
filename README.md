@@ -146,7 +146,7 @@ Quotes are amounts, not prices: the exchange derives the price and size of your 
 
 `python examples/combo_maker.py` joins as a maker and quotes every combo request on the exchange until you press Ctrl-C, printing how each one ends. Code: [`examples/combo_maker.py`](examples/combo_maker.py). It needs a `read_write` key.
 
-Each request arrives as `rfq_opened`. On a buy you quote what the player wins, the stake times `WIN_MULTIPLE` (default `9`); on a cash out you quote what you pay for everything the player sells, `CASH_OUT_PRICE` a contract (default `0.08`). Each quote stands for `QUOTE_SECONDS` (default `30`). The script checks that the amount prices inside the request's `max_price` and `tick_size` before it sends it, and skips the request if not. `python examples/combo_maker.py 120` stops after 120 seconds instead.
+Each request arrives as `rfq_opened`. On a buy you quote what the player wins, the stake times `WIN_MULTIPLE` (default `9`); on a cash out you quote what you pay for everything the player sells, `CASH_OUT_PRICE` a contract (default `0.08`). Each quote stands for `QUOTE_SECONDS` (default `30`). The script checks that the amount prices inside the request's `max_price` and `tick_size` before it sends it, and skips the request if not. `python examples/combo_maker.py 120` stops after 120 seconds instead. `PLAYER` set to a player's `external_id` (every request carries it) quotes only that player's requests, e.g. your own test account's.
 
 This run, on the Ontario demo exchange, quoted a buy and then the player's cash out of the same combo, and won both:
 
