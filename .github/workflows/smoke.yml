@@ -105,6 +105,14 @@ jobs:
           grep -q '^Placed: ' trade.log || { echo "::error::trade placed no order on ${{ matrix.name }}"; exit 1; }
           grep -q '^Final:   status cancelled' trade.log || { echo "::error::trade did not end with its order cancelled on ${{ matrix.name }}"; exit 1; }
 
+      - name: python examples/post_only.py
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          set -o pipefail
+          python examples/post_only.py | tee post_only.log
+          # Placed and cancelled where post-only orders are offered, or said not offered and sent nothing.
+          grep -qE '^(Cancel: .* cancelled|Not here: |No open market)' post_only.log || { echo "::error::post_only neither cancelled its order nor reported post-only as not offered on ${{ matrix.name }}"; exit 1; }
+
       - name: python examples/live.py
         if: steps.gate.outputs.skip != 'true'
         run: |
