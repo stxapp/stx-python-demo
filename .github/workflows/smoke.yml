@@ -3,7 +3,8 @@ name: Smoke
 # Runs every example against the public demo exchanges, selected with
 # STX_REGION and STX_ENV exactly as a customer would, using stx-python from
 # PyPI as pinned in requirements.txt. The trade example places one 1% buy that
-# rests on the book and cancels it before it exits. The combos example buys a
+# rests on the book and cancels it before it exits. The fill_modes example also
+# buys 1 contract fill-or-kill at the best offer where fill modes are on. The combos example buys a
 # small combo and cashes it out in the same run, while the maker example quotes
 # it from a second account. The maker quotes above the exchange's own maker, so
 # the run checks that the buy filled against the example maker's quote.
@@ -47,11 +48,14 @@ jobs:
             region: us
             env: demo
             required: true
+            fill_modes: "on"
           - name: ontario-demo
             prefix: ONTARIO_DEMO
             region: ontario
             env: demo
             required: false
+            # An older release: fill_mode is ignored and a normal order is placed.
+            fill_modes: ignored
     name: smoke (${{ matrix.name }})
     env:
       STX_REGION: ${{ matrix.region }}
@@ -105,13 +109,22 @@ jobs:
           grep -q '^Placed: ' trade.log || { echo "::error::trade placed no order on ${{ matrix.name }}"; exit 1; }
           grep -q '^Final:   status cancelled' trade.log || { echo "::error::trade did not end with its order cancelled on ${{ matrix.name }}"; exit 1; }
 
-      - name: python examples/post_only.py
+      - name: python examples/fill_modes.py
         if: steps.gate.outputs.skip != 'true'
         run: |
           set -o pipefail
-          python examples/post_only.py | tee post_only.log
-          # Placed and cancelled where post-only orders are offered, or said not offered and sent nothing.
-          grep -qE '^(Cancel: .* cancelled|Not here: |No open market)' post_only.log || { echo "::error::post_only neither cancelled its order nor reported post-only as not offered on ${{ matrix.name }}"; exit 1; }
+          python examples/fill_modes.py | tee fill_modes.log
+          grep -qE '^Cancel: .* cancelled' fill_modes.log || { echo "::error::fill_modes did not cancel its resting order on ${{ matrix.name }}"; exit 1; }
+          if [ "${{ matrix.fill_modes }}" = on ]; then
+            grep -q '^Rests: .* fill mode post_only' fill_modes.log || { echo "::error::the post-only order did not rest as post-only on ${{ matrix.name }}"; exit 1; }
+            if grep -q '^Market: .* best offer' fill_modes.log; then
+              grep -qE '^(Crossing: .*\(auto_matching\)  filled 0(\.0+)?$|Rests: +the offer moved)' fill_modes.log || { echo "::error::the crossing post-only order was not cancelled with auto_matching on ${{ matrix.name }}"; exit 1; }
+              grep -qE '^Fill-or-kill: .* (filled 1(\.0+)? |nothing filled)' fill_modes.log || { echo "::error::fill-or-kill was neither filled in full nor cancelled with nothing filled on ${{ matrix.name }}"; exit 1; }
+            fi
+          else
+            # An exchange on a release from before fill modes places a normal order (cancelled above).
+            grep -qE '^(Placed as a normal order|Not here: )' fill_modes.log || { echo "::error::expected fill_mode to be ignored or refused on ${{ matrix.name }}"; exit 1; }
+          fi
 
       - name: python examples/live.py
         if: steps.gate.outputs.skip != 'true'
