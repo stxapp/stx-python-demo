@@ -88,27 +88,17 @@ Final:   status cancelled  filled 0.00
 
 The order carries a `client_order_id`, your own id for it. If a call to place an order fails without an answer, look the order up by that id before placing it again; [Trading](https://docs.stxapp.io/sdks/python/trading/) explains why. The script does that lookup before it cancels, and it cancels whatever happens after the order is sent, so it never leaves an order on the book. It exits non-zero if the order is refused or does not end cancelled.
 
-### Place a post-only order
+### Post-only and fill-or-kill orders
 
-`python examples/post_only.py` places the same kind of 1-contract buy as `examples/trade.py`, but post-only: it only ever rests on the book as a maker, and if it would trade on arrival the exchange does not place it. The script cancels it before it exits. Code: [`examples/post_only.py`](examples/post_only.py).
+`python examples/fill_modes.py` shows the two fill modes in three orders. Code: [`examples/fill_modes.py`](examples/fill_modes.py).
 
-Not every exchange offers post-only orders yet. The SDK asks the exchange before sending one; where it is not offered, `place_order` raises `STXNotAvailableError` and sends nothing, and the script prints that and exits 0. On an exchange without them:
+1. A post-only buy at 1% of what a winning contract pays, where nobody offers that low: it rests on the book as a maker, and the script cancels it.
+2. A post-only buy at the best offer: it would take liquidity, so the exchange cancels it on arrival (`cancellation_reason` `auto_matching`) and nothing trades. The SDK raises `STXPostOnlyWouldMatchException` with the cancelled order.
+3. A fill-or-kill buy of 1 contract at the best offer: it fills in full, or is cancelled with nothing filled. If it fills, you hold 1 contract.
 
-```text
-Exchange: demo.stxapp.io 3.3.210-rnd.4  post-only: False
-Market:   Washington Capitals at Tampa Bay Lightning: Will the Tampa Bay Lightning defeat the Washington Capitals?
-          STXNHL-26NOV171930WSHTB-GAMETB  (a winning contract pays 1.0000)
-Not here: Post-only orders are not available on demo.stxapp.io (version 3.3.210-rnd.4) yet.
-```
+An exchange without fill modes may place a post-only or fill-or-kill order as a normal limit order, which can trade like any other order. Check `fill_mode` on the order that comes back. When step 1 shows the mode was not taken, the script cancels that order and skips steps 2 and 3. An exchange that has a mode switched off rejects the order instead, and `place_order` raises `STXNotAvailableError`.
 
-Where post-only orders are offered:
-
-```text
-Market:   Anaheim Ducks at St. Louis Blues: Will the St. Louis Blues defeat the Anaheim Ducks?
-          STXNHL-26NOV172000ANASTL-GAMESTL  (a winning contract pays 1.0000)
-Placed:   buy 1 @ 0.01  post-only  id 78b3fce3-4825-48cc-89d8-3fbdf2ba26c6  status accepted  fill mode post_only
-Cancel:   78b3fce3-4825-48cc-89d8-3fbdf2ba26c6  cancelled
-```
+OUTPUT_PLACEHOLDER
 
 The script also shows the errors for a request blocked before it reaches the exchange: `STXBlockedException` carries a `reason` (`restricted_jurisdiction`, `unusual_network`) and a `reference` to quote to STX support, and is never worth retrying. See [Trading](https://docs.stxapp.io/sdks/python/trading/) and [Errors & retries](https://docs.stxapp.io/sdks/python/errors-and-retries/).
 

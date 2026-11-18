@@ -1,1 +1,1 @@
-stx-python==0.9.0
+stx-python==0.10.1
