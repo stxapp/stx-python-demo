@@ -98,7 +98,29 @@ The order carries a `client_order_id`, your own id for it. If a call to place an
 
 An exchange without fill modes may place a post-only or fill-or-kill order as a normal limit order, which can trade like any other order. Check `fill_mode` on the order that comes back. When step 1 shows the mode was not taken, the script cancels that order and skips steps 2 and 3. An exchange that has a mode switched off rejects the order instead, and `place_order` raises `STXNotAvailableError`.
 
-OUTPUT_PLACEHOLDER
+Where fill modes are on:
+
+```text
+Exchange: demo.stxapp.io
+Market:   Houston Cougars at Florida Gators: Will the Florida Gators and the Houston Cougars combine to score more than 150.5 points?
+          STXNCAAB-26NOV181644HOUFLA-TOTAL150.5  (a winning contract pays 1.0000)
+Rests:    buy 1 @ 0.01  id fb1835ae-1e16-4bac-bff3-6e3752695aa7  status accepted  fill mode post_only
+Cancel:   fb1835ae-1e16-4bac-bff3-6e3752695aa7  cancelled
+Market:   Philadelphia 76ers at Orlando Magic: Will Franz Wagner have more than 6.5 Rebounds?  best offer 0.5000
+Crossing: post-only buy @ 0.5000 not placed (auto_matching)  filled 0.00
+Fill-or-kill: buy 1 @ 0.5000  filled 1.00 at avg 0.5000
+```
+
+On an exchange without fill modes, the first order is placed as a normal order:
+
+```text
+Exchange: demo.stxapp.ca
+Market:   Houston Cougars at Florida Gators: Will the Florida Gators defeat the Houston Cougars?
+          STXNCAAB-26NOV181644HOUFLA-GAMEFLA  (a winning contract pays 1.0000)
+Placed as a normal order: buy 1 @ 0.01  id 3b44e57d-901f-43c5-aac1-3a7fbe2a2959  fill mode None
+Cancel:   3b44e57d-901f-43c5-aac1-3a7fbe2a2959  cancelled
+This exchange does not take fill modes, so the crossing examples are skipped.
+```
 
 The script also shows the errors for a request blocked before it reaches the exchange: `STXBlockedException` carries a `reason` (`restricted_jurisdiction`, `unusual_network`) and a `reference` to quote to STX support, and is never worth retrying. See [Trading](https://docs.stxapp.io/sdks/python/trading/) and [Errors & retries](https://docs.stxapp.io/sdks/python/errors-and-retries/).
 
